@@ -1,0 +1,271 @@
+# cq18t.py library
+
+# --- Constantes du Protocole Allen & Heath CQ ---
+# RAPPEL : CES VALEURS DOIVENT ÊTRE CONFIRMÉES PAR LE MANUEL OFFICIEL CQ-18T !
+CQ_MIDI_CHANNEL = 1  # Le CQ utilise par défaut le Canal 1 (0 en indexation 0)
+
+# Valeurs Mute (14-bit)
+MUTE_ON_VALUE = 16383  # Valeur max
+MUTE_OFF_VALUE = 0     # Valeur min
+
+# --- Mappage NRPN LSB (Index du Canal) ---
+CQ_CHANNEL_MAP = {
+    # 16 Canaux Mono (IN1-IN16) -> LSB 0 à 15
+    'IN1': 0x00, 'IN2':  0x01, 'IN3':  0x02, 'IN4':  0x03, 'IN5':  0x04, 'IN6':  0x05, 'IN7':  0x06, 'IN8':  0x07, 
+    'IN9': 0x08, 'IN10': 0x09, 'IN11': 0x0A, 'IN12': 0x0B, 'IN13': 0x0C, 'IN14': 0x0D, 'IN15': 0x0E, 'IN16': 0x0F,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1': 0x00, 'ST3':  0x02, 'ST5':  0x04, 'ST7':  0x06, 'ST9':  0x08, 'ST11': 0x0A, 'ST13': 0x0C, 'ST15': 0x0E,
+
+    # Entrées Stéréo Dédiées et Retours Numériques (Hypothèses)
+    'ST17': 0x18,     # ST17/18 (assumé)
+    'USB':  0x1C,      # USB (assumé)
+    'BT':   0x1E,       # Bluetooth (assumé)
+    
+    # Send FX
+    
+    # Sorties Mix (OUT1-OUT6) / FX (FX1-FX4)
+    # Note: Les sorties n'utilisent généralement pas le même LSB que les entrées, 
+    # elles sont souvent contrôlées par un MSB différent (PARAM_SEND_BASE_MSB) 
+    # et une LSB de destination. Nous gardons les LSB d'Entrée ici pour la cohérence 
+    # si jamais elles sont utilisées comme Entrées de Mix.
+}
+# La fonction parse_cq_command utilisera ce mapping pour trouver le LSB.
+
+# Mappage des bus de sortie
+#### Ce map est une base de calcul pour la fonction get_fader_index
+SEND_BUS_MAP = {
+    'FX1':  0x14, # canal pour le send IN01 vers FX1
+    'FX2':  0x15, # canal pour le send IN01 vers FX2
+    'FX3':  0x16, # canal pour le send IN01 vers FX3
+    'FX4':  0x17, # canal pour le send IN01 vers FX4
+    'MAIN': 0x00, # canal pour le send IN01 vers MAIN
+    'OUT1': 0x44, # canal pour le send IN01 vers OUT1
+    'OUT2': 0x45, # canal pour le send IN01 vers OUT2
+    'OUT3': 0x46, # canal pour le send IN01 vers OUT3
+    'OUT4': 0x47, # canal pour le send IN01 vers OUT4
+    'OUT5': 0x48, # canal pour le send IN01 vers OUT5
+    'OUT6': 0x49, # canal pour le send IN01 vers OUT6
+}
+
+def convert_hex_to14bits(value16):
+    # les valeurs MIDI sont codées sur des octets de 7 bits
+    msb = int((value16 & 0xff00)*2 + (value16 & 0x80)*2))
+    lsb = int(value16 & 0x7f)
+    return msb*0x100 + lsb
+        
+def convert_14bits_to_hex(value14):
+    # les valeurs dans les tables d'interpolation de la doc CQ18 sont codées sur 2 octets de 7 bits (MIDI)
+    msb = int((value14 & 0xff00) / 0x200)
+    lsb = int((value14 & 0x7f) + ((value14 & 0x0100)/2))
+    return msb * 0x100 + lsb
+    
+def get_fader_index(in_canonical_name, bus_canonical_name):
+    """Retourne un integer sur 16 bits utilisé pour les commandes de fader - cf protocole MIDI page 17"""
+    # Exemple : in_send_bus("IN3", "OUT4") doit retourner 0x405F
+    in_index = CQ_CHANNEL_MAP[in_canonical_name]
+    bus_index = SEND_BUS_MAP[bus_canonical_name]
+    
+    if bus_index == 0x00: # main
+        fader_index = 0x4000 + in_index
+    elif bus_index >= 0x14 and bus_index <= 0x17: # FX
+        fader_index = 0x4C14 + in_index*4 + (bus_index-0x14)
+    elif bus_index >= 0x44 and bus_index <= 0x49: # OUT
+        fader_index = 0x4044 + in_index*12 + (bus_index-0x44)
+    else:
+        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
+        fader_index = 0
+
+    msb = int((fader_index & 0xff00) + (fader_index & 0x80)*2))
+    lsb = int(fader_index & 0x7f)
+    return msb*0x100 + lsb
+
+
+# Calcul des valeurs VC/VF nécessaire au contrôle des faders de la CQ18T et des PAN
+# Les 2 tables "VAL14" contiennent les valeurs définies dans la doc A&H Protocole MIDI
+# Elles sont codées sous forme de 2 octets de 7 bits (compatibilité MIDI)
+TABLE_VCVF_FADER_VAL14 = [
+    [-89, 0x0140], [-85, 0x0200], [-80, 0x0240], [-75, 0x0300], [-70, 0x0400], [-65, 0x0500], [-60, 0x0600], [-55, 0x0700],
+    [-50, 0x0800], [-45, 0x0C00], [-40, 0x0F40], [-38, 0x1240], [-36, 0x1540], [-35, 0x1700], [-34, 0x1900], [-33, 0x1A00],
+    [-32, 0x1C00], [-31, 0x1D40], [-30, 0x1F00], [-29, 0x2040], [-28, 0x2200], [-27, 0x2340], [-26, 0x2500], [-25, 0x2640],
+    [-24, 0x2840], [-23, 0x2A00], [-22, 0x2B40], [-21, 0x2D00], [-20, 0x2E40], [-19, 0x3000], [-18, 0x3140], [-17, 0x3300],
+    [-16, 0x3440], [-15, 0x3600], [-14, 0x3800], [-13, 0x3940], [-12, 0x3B00], [-11, 0x3C40], [-10, 0x3E00], [-9,  0x4140],
+    [-8,  0x4440], [-7,  0x4800], [-6,  0x4B00], [-5,  0x4E40], [-4,  0x5240], [-3,  0x5640], [-2,  0x5A00], [-1,  0x5E00],
+    [0,   0x6200], [1,   0x6540], [2,   0x6900], [3,   0x6C40], [4,   0x7000], [5,   0x7340], [6,   0x7540], [7,   0x7800],
+    [8,   0x7A40], [9,   0x7D00], [10,  0x7F40]
+]
+
+TABLE_VCVF_PAN_VAL14 = [
+    [-100, 0x0000], [-90, 0x0633], [-80, 0x0C66], [-70, 0x1319], [-60, 0x194C], [-50, 0x1F7F], [-40, 0x2632], [-30, 0x2C65],
+    [-20,  0x3318], [-15, 0x3632], [-10, 0x394B], [-5,  0x3C65], [0,   0x4000], [5,   0x4318], [10,  0x4632], [15,  0x494B],
+    [20,   0x4C65], [30,  0x5318], [40, 0x594B],  [50,  0x5F7F], [60,  0x6632], [60,  0x6632], [70,  0x6C65], [80,  0x7318],
+    [90,   0x764B], [100, 0x7F7F]
+]
+
+# tables globales : valeurs VCVF recalculées en hexa sur 16 bits pour permettre les calculs d'interpolation
+table_vcvf_fader_hex = []
+table_vcvf_pan_hex = []
+
+# compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
+# compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
+
+def compute_table_val14_to_hex(table_hex, table_val14):
+    table_hex = []
+    for dec_value, val14 in table_val14:
+        # 1. Calcul de la valeur entière 16 bits
+        val16 = convert_14bits_to_hex(val14)
+        
+        # 2. Ajout du nouveau doublet à la table finale
+        table_hex.append([dec_value, val16])        
+        
+def hex_to_dec(hex_value):
+    """Convertit une chaîne hexadécimale en entier décimal."""
+    # La fonction int() avec base 16 gère la conversion.
+    # On ajoute le préfixe '0x' si manquant pour plus de robustesse.
+    if not hex_value.startswith('0x') and not hex_value.startswith('0X'):
+        hex_value = '0x' + hex_value
+    return int(hex_value, 16)
+
+def dec_to_hex_16bit(dec_value):
+    """Convertit un entier décimal en chaîne hexadécimale de 16 bits (4 caractères)."""
+    # On s'assure que la valeur reste dans la plage 16 bits (0 à 65535)
+    dec_value = max(0, min(65535, round(dec_value)))
+    # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
+    return f'{dec_value:04X}'
+    
+def interpoler_vcvf(table_interpolation, valeur_entree):
+    """
+    Calcule une valeur interpolée à partir d'une table avec une colonne VCVF en hexadécimal 16 bits.
+
+    Args:
+        table_interpolation (list): Liste de listes/tuples, par ex. [[X1, VCVF_DEC1, VCVF_HEX1], [X2, VCVF_DEC2, VCVF_HEX2], ...]
+            La 3ème colonne (VCVF_HEX) est ignorée si elle est passée, mais une table formatée avec 3 colonnes est acceptée.
+            Les colonnes 0 (X) et 1 (VCVF_DEC) doivent être des nombres.
+        valeur_entree (float): La valeur X pour laquelle on cherche le VCVF interpolé.
+
+    Returns:
+        str: La valeur VCVF interpolée, arrondie à l'entier le plus proche et formatée en hexadécimal 16 bits (4 chiffres).
+    """
+
+    # 1. Préparation des données pour numpy.interp
+    # Extraction des colonnes X et VCVF (en décimal)
+    xp = np.array([row[0] for row in table_interpolation]) # Colonne des valeurs recherchées (X)
+    
+    # On suppose que la colonne VCVF (colonne 2) est en hexadécimal et doit être convertie.
+    # On utilise un test pour savoir si la colonne VCVF est déjà en décimal ou en hexadécimal string
+    # Si la colonne est déjà numérique (float/int), on l'utilise directement (colonne 1).
+    # Sinon, on prend la colonne 2 et on la convertit.
+    
+    try:
+        # Test si la 2ème colonne (indice 1) est déjà numérique
+        # Cela suppose que si la table a 3 colonnes, les colonnes sont [X, VCVF_DEC, VCVF_HEX]
+        # Dans ce cas, nous devons utiliser la colonne 2 (indice 2) pour l'hexadécimal ou la colonne 1 (indice 1) si elle a été pré-convertie.
+        # Pour être plus robuste, nous allons forcer l'extraction des données X et Y (VCVF)
+        
+        # Nous allons supposer que la colonne des valeurs recherchées (X) est la première (indice 0) 
+        # et que la colonne VCVF (la valeur à interpoler) est la deuxième (indice 1).
+        # Si VCVF est un string, c'est l'hexadécimal et on doit convertir.
+        
+        y_raw = [row[1] for row in table_interpolation]
+        
+        if isinstance(y_raw[0], str):
+            # La colonne VCVF est une chaîne hexa, on la convertit en décimal
+            yp = np.array([hex_to_dec(h) for h in y_raw])
+        else:
+            # La colonne VCVF est déjà numérique (décimal)
+            yp = np.array(y_raw)
+            
+    except (IndexError, TypeError, ValueError) as e:
+        print(f"Erreur lors du traitement de la table : {e}. Assurez-vous que la table a au moins 2 colonnes où la 1ère est la valeur X et la 2ème est la valeur VCVF (décimale ou hexadécimale string).")
+        return "ERREUR"
+
+
+    # 2. Définition des bornes d'extrapolation
+    # Selon la demande:
+    # Si < min(X), retourne VCVF min (yp[0])
+    # Si > max(X), retourne VCVF max (yp[-1])
+    # C'est la gestion par défaut de np.interp qui n'est pas tout à fait celle demandée (np.interp utilise les bornes pour l'interpolation)
+    # L'option fill_value=(yp[0], yp[-1]), bounds_error=False de interp1d est plus explicite.
+    
+    # Pour respecter EXACTEMENT la règle (valeur MIN/MAX en cas d'extrapolation),
+    # nous utilisons une approche manuelle ou la fonction `np.interp` mais en bornant l'entrée.
+    
+    # Avec np.interp, nous avons la gestion native de l'interpolation.
+    # Pour l'extrapolation :
+    # Si l'entrée est hors limites, nous renvoyons les valeurs aux extrémités.
+
+    if valeur_entree <= xp[0]:
+        valeur_vcvf_dec = yp[0]
+    elif valeur_entree >= xp[-1]:
+        valeur_vcvf_dec = yp[-1]
+    else:
+        # Interpolation linéaire
+        # y = np.interp(x, xp, fp)
+        # x est la valeur à évaluer (valeur_entree)
+        # xp est le tableau des points d'abscisse (valeur recherchée)
+        # fp est le tableau des valeurs à interpoler (VCVF)
+        valeur_vcvf_dec = np.interp(valeur_entree, xp, yp)
+
+    # 3. Formatage de la sortie
+    return dec_to_hex_16bit(valeur_vcvf_dec)
+    
+    
+# --- Conversion de Commandes Intelligibles vers MIDI ---
+def fader_db_to_nrpn(fader_db):
+    """convertit une valeur en db (chaine de caracteres) en un double MSB/LSB compatible avec le protocole CQ18T)"""
+    # la valeur fader_db est un string car il peut valoir "-inf" ou "off"
+    # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation table_vcvf_fader_hex
+    if fader_db.lower()  == 'off' or fader_db.lower()  == '-inf':
+        return (0x00,0x00)
+    else:
+        vcvf = interpoler_vcvf(table_vcvf_fader_hex, int(fader_db))
+        vcvf14 = convert_hex_to14bits(vcvf)
+        nrpn_msb = vcvf14 & 0xff00
+        nrpn_lsb = vcvf14 & 0x00ff
+        return (nrpn_msb, nrpn_lsb)
+    
+def pan_to_nrpn(pan):
+    """convertit une valeur de pan (chaine de caracteres) en un double MSB/LSB compatible avec le protocole CQ18T)"""
+    # la valeur pan est un string car il peut valoir "center" ou "left 30%", ou "right 50%"
+    # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation table_vcvf_pan_hex
+    
+    pan_str = pan.lower().strip()
+    if 'center' in pan_str:
+        return (0x40,0x00)
+    
+    match = re.match(r'(left|right)\s*(\d+)\s*%', pan_str)
+    if match:
+        direction = match.group(1)
+        percent = int(match.group(2))
+        val = int(percent * (PAN_CENTER / 100.0))
+        if direction == 'left':
+            val = -1 * percent
+        else:
+            val = percent
+
+        vcvf = interpoler_vcvf(table_vcvf_pan_hex, int(val))
+        vcvf14 = convert_hex_to14bits(vcvf)
+        nrpn_msb = vcvf14 & 0xff00
+        nrpn_lsb = vcvf14 & 0x00ff
+        return (nrpn_msb, nrpn_lsb)         
+
+    # par defaut, retourner la valeur CENTER
+    return (0x40,0x00)
+
+def nrpn_to_midi_messages(midi_channel, nrpn_msb, nrpn_lsb, value_14bit):
+    """Crée la séquence de 4 messages CC NRPN."""
+    
+    value_msb = (value_14bit >> 7) & 0x7F # Bits 7-13
+    value_lsb = value_14bit & 0x7F        # Bits 0-6
+
+    # 1. NRPN MSB (Contrôleur 99)
+    msg1 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 99, nrpn_msb] 
+    # 2. NRPN LSB (Contrôleur 98)
+    msg2 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 98, nrpn_lsb] 
+    # 3. Data Entry MSB (Contrôleur 6)
+    msg3 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 6, value_msb] 
+    # 4. Data Entry LSB (Contrôleur 38)
+    msg4 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 38, value_lsb]
+
+    return [msg1, msg2, msg3, msg4]
+
