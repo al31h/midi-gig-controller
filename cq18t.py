@@ -4,33 +4,91 @@
 # RAPPEL : CES VALEURS DOIVENT ÊTRE CONFIRMÉES PAR LE MANUEL OFFICIEL CQ-18T !
 CQ_MIDI_CHANNEL = 1  # Le CQ utilise par défaut le Canal 1 (0 en indexation 0)
 
-# Valeurs Mute (14-bit)
-MUTE_ON_VALUE = 16383  # Valeur max
-MUTE_OFF_VALUE = 0     # Valeur min
 
-# --- Mappage NRPN LSB (Index du Canal) ---
-CQ_CHANNEL_MAP = {
-    # 16 Canaux Mono (IN1-IN16) -> LSB 0 à 15
-    'IN1': 0x00, 'IN2':  0x01, 'IN3':  0x02, 'IN4':  0x03, 'IN5':  0x04, 'IN6':  0x05, 'IN7':  0x06, 'IN8':  0x07, 
-    'IN9': 0x08, 'IN10': 0x09, 'IN11': 0x0A, 'IN12': 0x0B, 'IN13': 0x0C, 'IN14': 0x0D, 'IN15': 0x0E, 'IN16': 0x0F,
+# ==============================================================================
+# TABLES DE VALEURS CQ18T
+# Issues de la documentation MIDI Protocol V1.2
+# ==============================================================================
+CQ_TABLE_SOFTKEYS_MAP = [
+    [1, 'C3",  0x30],
+    [2, 'C#3", 0x31],
+    [3, 'D3",  0x32]
+]
+
+# Calcul des valeurs VC/VF nécessaire au contrôle des faders de la CQ18T et des PAN
+# Les 2 tables "VAL14" contiennent les valeurs définies dans la doc A&H Protocole MIDI
+# Elles sont codées sous forme de 2 octets de 7 bits (compatibilité MIDI)
+TABLE_VCVF_FADER_VAL14 = [
+    [-89, 0x0140], [-85, 0x0200], [-80, 0x0240], [-75, 0x0300], [-70, 0x0400], [-65, 0x0500], [-60, 0x0600], [-55, 0x0700],
+    [-50, 0x0800], [-45, 0x0C00], [-40, 0x0F40], [-38, 0x1240], [-36, 0x1540], [-35, 0x1700], [-34, 0x1900], [-33, 0x1A00],
+    [-32, 0x1C00], [-31, 0x1D40], [-30, 0x1F00], [-29, 0x2040], [-28, 0x2200], [-27, 0x2340], [-26, 0x2500], [-25, 0x2640],
+    [-24, 0x2840], [-23, 0x2A00], [-22, 0x2B40], [-21, 0x2D00], [-20, 0x2E40], [-19, 0x3000], [-18, 0x3140], [-17, 0x3300],
+    [-16, 0x3440], [-15, 0x3600], [-14, 0x3800], [-13, 0x3940], [-12, 0x3B00], [-11, 0x3C40], [-10, 0x3E00], [-9,  0x4140],
+    [-8,  0x4440], [-7,  0x4800], [-6,  0x4B00], [-5,  0x4E40], [-4,  0x5240], [-3,  0x5640], [-2,  0x5A00], [-1,  0x5E00],
+    [0,   0x6200], [1,   0x6540], [2,   0x6900], [3,   0x6C40], [4,   0x7000], [5,   0x7340], [6,   0x7540], [7,   0x7800],
+    [8,   0x7A40], [9,   0x7D00], [10,  0x7F40]
+]
+
+TABLE_VCVF_PAN_VAL14 = [
+    [-100, 0x0000], [-90, 0x0633], [-80, 0x0C66], [-70, 0x1319], [-60, 0x194C], [-50, 0x1F7F], [-40, 0x2632], [-30, 0x2C65],
+    [-20,  0x3318], [-15, 0x3632], [-10, 0x394B], [-5,  0x3C65], [0,   0x4000], [5,   0x4318], [10,  0x4632], [15,  0x494B],
+    [20,   0x4C65], [30,  0x5318], [40, 0x594B],  [50,  0x5F7F], [60,  0x6632], [60,  0x6632], [70,  0x6C65], [80,  0x7318],
+    [90,   0x764B], [100, 0x7F7F]
+]
+
+CQ_MUTE_CHANNELS_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x0000, 'IN2':     0x0001, 'IN3':     0x0002, 'IN4':     0x0003, 
+    'IN5':    0x0004, 'IN6':     0x0005, 'IN7':     0x0006, 'IN8':     0x0007, 
+    'IN9':    0x0008, 'IN10':    0x0009, 'IN11':    0x000A, 'IN12':    0x000B, 
+    'IN13':   0x000C, 'IN14':    0x000D, 'IN15':    0x000E, 'IN16':    0x000F,
 
     # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
-    'ST1': 0x00, 'ST3':  0x02, 'ST5':  0x04, 'ST7':  0x06, 'ST9':  0x08, 'ST11': 0x0A, 'ST13': 0x0C, 'ST15': 0x0E,
+    'ST1/2':  0x0000, 'ST3/4':   0x0002, 'ST5/6':   0x0004, 'ST7/8':   0x0006, 
+    'ST9/10': 0x0008, 'ST11/12': 0x000A, 'ST13/14': 0x000C, 'ST15/16': 0x000E,
 
-    # Entrées Stéréo Dédiées et Retours Numériques (Hypothèses)
-    'ST17': 0x18,     # ST17/18 (assumé)
-    'USB':  0x1C,      # USB (assumé)
-    'BT':   0x1E,       # Bluetooth (assumé)
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x0018,     # ST17/18
+    'ST2':    0x001A,
+    'USB':    0x001C,     # USB 
+    'BT':     0x001E,     # Bluetooth
     
-    # Send FX
+    # Sorties Bus FX
+    'FX1':    0x0051, 'FX2':     0x0052, 'FX3':     0x0053, 'FX4':     0x0054, 
     
-    # Sorties Mix (OUT1-OUT6) / FX (FX1-FX4)
-    # Note: Les sorties n'utilisent généralement pas le même LSB que les entrées, 
-    # elles sont souvent contrôlées par un MSB différent (PARAM_SEND_BASE_MSB) 
-    # et une LSB de destination. Nous gardons les LSB d'Entrée ici pour la cohérence 
-    # si jamais elles sont utilisées comme Entrées de Mix.
+    # Sorties Bus mix
+    'MAIN':   0x0044,
+    'OUT1':   0x0045, 'OUT2':    0x0046, 'OUT3':    0x0047, 'OUT4':    0x0048, 'OUT5':    0x0049, 'OUT6':    0x004A, 
+    'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049
+    
+    # MIX GROUPS
+    'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP3':  0x0403, 
+    
+    # DCA
+    'DCA1':   0x0200, 'DCA2':    0x0201, 'DCA3':    0x0202, 'DCA4':    0x0203
 }
-# La fonction parse_cq_command utilisera ce mapping pour trouver le LSB.
+
+CQ_FADER_CHANNELS_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x4000, 'IN2':     0x4001, 'IN3':     0x4002, 'IN4':     0x4003, 
+    'IN5':    0x4004, 'IN6':     0x4005, 'IN7':     0x4006, 'IN8':     0x4007, 
+    'IN9':    0x4008, 'IN10':    0x4009, 'IN11':    0x400A, 'IN12':    0x400B, 
+    'IN13':   0x400C, 'IN14':    0x400D, 'IN15':    0x400E, 'IN16':    0x400F,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x4000, 'ST3/4':   0x4002, 'ST5/6':   0x4004, 'ST7/8':   0x4006, 
+    'ST9/10': 0x4008, 'ST11/12': 0x400A, 'ST13/14': 0x400C, 'ST15/16': 0x400E,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x4018,     # ST17/18
+    'ST2':    0x401A,
+    'USB':    0x401C,     # USB 
+    'BT':     0x401E,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x403C, 'FX2':     0x403D, 'FX3':     0x403E, 'FX4':     0x403F   
+}
+
 
 # Mappage des bus de sortie
 #### Ce map est une base de calcul pour la fonction get_fader_index
@@ -48,6 +106,10 @@ SEND_BUS_MAP = {
     'OUT6': 0x49, # canal pour le send IN01 vers OUT6
 }
 
+# ==============================================================================
+# FONCTIONS GENERIQUES
+# ==============================================================================
+
 def convert_hex_to14bits(value16):
     # les valeurs MIDI sont codées sur des octets de 7 bits
     msb = int((value16 & 0xff00)*2 + (value16 & 0x80)*2))
@@ -59,6 +121,10 @@ def convert_14bits_to_hex(value14):
     msb = int((value14 & 0xff00) / 0x200)
     lsb = int((value14 & 0x7f) + ((value14 & 0x0100)/2))
     return msb * 0x100 + lsb
+
+# ==============================================================================
+# FONCTIONS SPECIFIQUES CQ18T 
+# ==============================================================================
     
 def get_fader_index(in_canonical_name, bus_canonical_name):
     """Retourne un integer sur 16 bits utilisé pour les commandes de fader - cf protocole MIDI page 17"""
@@ -81,26 +147,6 @@ def get_fader_index(in_canonical_name, bus_canonical_name):
     return msb*0x100 + lsb
 
 
-# Calcul des valeurs VC/VF nécessaire au contrôle des faders de la CQ18T et des PAN
-# Les 2 tables "VAL14" contiennent les valeurs définies dans la doc A&H Protocole MIDI
-# Elles sont codées sous forme de 2 octets de 7 bits (compatibilité MIDI)
-TABLE_VCVF_FADER_VAL14 = [
-    [-89, 0x0140], [-85, 0x0200], [-80, 0x0240], [-75, 0x0300], [-70, 0x0400], [-65, 0x0500], [-60, 0x0600], [-55, 0x0700],
-    [-50, 0x0800], [-45, 0x0C00], [-40, 0x0F40], [-38, 0x1240], [-36, 0x1540], [-35, 0x1700], [-34, 0x1900], [-33, 0x1A00],
-    [-32, 0x1C00], [-31, 0x1D40], [-30, 0x1F00], [-29, 0x2040], [-28, 0x2200], [-27, 0x2340], [-26, 0x2500], [-25, 0x2640],
-    [-24, 0x2840], [-23, 0x2A00], [-22, 0x2B40], [-21, 0x2D00], [-20, 0x2E40], [-19, 0x3000], [-18, 0x3140], [-17, 0x3300],
-    [-16, 0x3440], [-15, 0x3600], [-14, 0x3800], [-13, 0x3940], [-12, 0x3B00], [-11, 0x3C40], [-10, 0x3E00], [-9,  0x4140],
-    [-8,  0x4440], [-7,  0x4800], [-6,  0x4B00], [-5,  0x4E40], [-4,  0x5240], [-3,  0x5640], [-2,  0x5A00], [-1,  0x5E00],
-    [0,   0x6200], [1,   0x6540], [2,   0x6900], [3,   0x6C40], [4,   0x7000], [5,   0x7340], [6,   0x7540], [7,   0x7800],
-    [8,   0x7A40], [9,   0x7D00], [10,  0x7F40]
-]
-
-TABLE_VCVF_PAN_VAL14 = [
-    [-100, 0x0000], [-90, 0x0633], [-80, 0x0C66], [-70, 0x1319], [-60, 0x194C], [-50, 0x1F7F], [-40, 0x2632], [-30, 0x2C65],
-    [-20,  0x3318], [-15, 0x3632], [-10, 0x394B], [-5,  0x3C65], [0,   0x4000], [5,   0x4318], [10,  0x4632], [15,  0x494B],
-    [20,   0x4C65], [30,  0x5318], [40, 0x594B],  [50,  0x5F7F], [60,  0x6632], [60,  0x6632], [70,  0x6C65], [80,  0x7318],
-    [90,   0x764B], [100, 0x7F7F]
-]
 
 # tables globales : valeurs VCVF recalculées en hexa sur 16 bits pour permettre les calculs d'interpolation
 table_vcvf_fader_hex = []
