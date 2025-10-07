@@ -439,9 +439,7 @@ def list_midi_ports():
 
 def main():
     
-    # prépare les tables d'interpolation pour la console CQ18T
-    compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
-    compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
+
 
 
     parser = ArgumentParser(description="Contrôleur de show MIDI pour Allen & Heath CQ-18T et effets externes.")
@@ -489,6 +487,7 @@ def main():
         print("\nArrêt demandé par l'utilisateur.")
     except Exception as e:
         print(f"Une erreur inattendue s'est produite: {e}")
+
 
 if __name__ == '__main__':
 

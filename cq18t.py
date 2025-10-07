@@ -1,14 +1,33 @@
 # cq18t.py library
 import re
+import rtmidi
 
 # --- Constantes du Protocole Allen & Heath CQ ---
 # RAPPEL : CES VALEURS DOIVENT ÊTRE CONFIRMÉES PAR LE MANUEL OFFICIEL CQ-18T !
 CQ_MIDI_CHANNEL = 1  # Le CQ utilise par défaut le Canal 1 (0 en indexation 0)
 
+CQ_HEXVALUE_ERROR = 0xFFFF  # valeur impossible car les valeurs transmises sur MIDI sont sur 7 bits
+
+
 # ==============================================================================
 # FONCTIONS GENERIQUES
 # ==============================================================================
 
+def hex_to_dec(hex_value):
+    """Convertit une chaîne hexadécimale en entier décimal."""
+    # La fonction int() avec base 16 gère la conversion.
+    # On ajoute le préfixe '0x' si manquant pour plus de robustesse.
+    if not hex_value.startswith('0x') and not hex_value.startswith('0X'):
+        hex_value = '0x' + hex_value
+    return int(hex_value, 16)
+
+def dec_to_hex_16bit(dec_value):
+    """Convertit un entier décimal en chaîne hexadécimale de 16 bits (4 caractères)."""
+    # On s'assure que la valeur reste dans la plage 16 bits (0 à 65535)
+    dec_value = max(0, min(65535, round(dec_value)))
+    # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
+    return f'{dec_value:04X}'
+    
 def convert_hex_to14bits(value16):
     # les valeurs MIDI sont codées sur des octets de 7 bits
     msb = int((value16 & 0xff00)*2 + (value16 & 0x80)*2))
@@ -121,12 +140,24 @@ def get_interpolated_value(table_interpolation, valeur_entree):
 # TABLES DE VALEURS CQ18T
 # Issues de la documentation MIDI Protocol V1.2
 # ==============================================================================
-CQ_TABLE_SOFTKEYS_MAP = [
-    [1, 'C3",  0x30],
-    [2, 'C#3", 0x31],
-    [3, 'D3",  0x32]
-]
 
+CQ_TABLE_SOFTKEYS_MAP = {
+    'Soft Key #1': 0x30,
+    'Soft Key #2': 0x31,
+    'Soft Key #3': 0x32
+}
+
+def get_softkey_midicode_by_name(softkey_canonical_name):
+    """
+    Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
+    Fonction utile pour piloter le niveau des bus (par exemple, la sortie MAIN générale)
+    """
+    try:
+        sk_code = CQ_TABLE_SOFTKEYS_MAP[softkey_canonical_name]
+    except:
+        return CQ_HEXVALUE_ERROR
+        
+    return sk_code
 
 # ==============================================================================
 # MUTE
@@ -238,14 +269,28 @@ def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
     
     if bus_type == 'MAIN':
-        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_MAIN_MAP[in_canonical_name])
+        try:
+            in_index_hex = CQ_FADER_TO_MAIN_MAP[in_canonical_name]
+        except:
+            return CQ_HEXVALUE_ERROR
+
     elif bus_type == 'OUT': 
-        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_OUT_MAP[in_canonical_name])
+        try:
+            in_index_hex = CQ_FADER_TO_OUT_MAP[in_canonical_name]
+        except:
+            return CQ_HEXVALUE_ERROR
+            
     elif bus_type == 'FX': 
-        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_FX_MAP[in_canonical_name])
+        try:
+            in_index_hex = CQ_FADER_TO_FX_MAP[in_canonical_name]
+        except:
+            return CQ_HEXVALUE_ERROR
+            
     else:
         print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
-        return 0x0000
+        return CQ_HEXVALUE_ERROR
+
+    in_index_14 = convert_14bits_to_hex(in_index_hex)
 
     fader_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
     fader_vcvf_14 = convert_hex_to14bits(fader_vcvf_hex)
@@ -269,7 +314,12 @@ def get_bus_fader_vcvf(bus_canonical_name):
     Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
     Fonction utile pour piloter le niveau des bus (par exemple, la sortie MAIN générale)
     """
-    return (CQ_BUS_FADER_MAP[bus_canonical_name])
+    try:
+        fader_index_hex = CQ_BUS_FADER_MAP[bus_canonical_name]
+    except:
+        return CQ_HEXVALUE_ERROR
+        
+    return fader_index_hex
 
 # ==============================================================================
 # PAN TO BUS MAPPING
@@ -325,13 +375,22 @@ def get_pan_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
     
     if bus_type == 'MAIN':
-        in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_MAIN_MAP[in_canonical_name])
+        try:
+            in_index_hex = CQ_PAN_TO_MAIN_MAP[in_canonical_name]
+        except:
+            return CQ_HEXVALUE_ERROR
+            
     elif bus_type == 'OUT': 
-        in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_OUT_MAP[in_canonical_name])
+        try:
+            in_index_hex = CQ_PAN_TO_OUT_MAP[in_canonical_name]
+        except:
+            return CQ_HEXVALUE_ERROR
+            
     else:
         print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
-        return 0x0000
+        return CQ_HEXVALUE_ERROR
 
+    in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_OUT_MAP[in_canonical_name])
     pan_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
     pan_vcvf_14 = convert_hex_to14bits(pan_vcvf_hex)
     
@@ -360,6 +419,14 @@ table_vcvf_fader_hex = []
 
 def get_fader_vcvf(value_db):
     
+    if value_db == '-inf' or value_db == 'off':
+        return CQ_HEXVALUE_ERROR
+    
+    vcvf_hex = get_interpolated_value(float(value_db))
+    vcvf_14 = convert_hex_to14bits(vcvf_hex)
+    
+    return vcvf_14 
+
 
 # ==============================================================================
 # PAN VALUES
@@ -374,82 +441,152 @@ TABLE_VCVF_PAN_VAL14 = [
 
 table_vcvf_pan_hex = []
 
-# compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
-# compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
-
-def hex_to_dec(hex_value):
-    """Convertit une chaîne hexadécimale en entier décimal."""
-    # La fonction int() avec base 16 gère la conversion.
-    # On ajoute le préfixe '0x' si manquant pour plus de robustesse.
-    if not hex_value.startswith('0x') and not hex_value.startswith('0X'):
-        hex_value = '0x' + hex_value
-    return int(hex_value, 16)
-
-def dec_to_hex_16bit(dec_value):
-    """Convertit un entier décimal en chaîne hexadécimale de 16 bits (4 caractères)."""
-    # On s'assure que la valeur reste dans la plage 16 bits (0 à 65535)
-    dec_value = max(0, min(65535, round(dec_value)))
-    # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
-    return f'{dec_value:04X}'
-    
-    
-    
-# --- Conversion de Commandes Intelligibles vers MIDI ---
-def fader_db_to_nrpn(fader_db):
-    """convertit une valeur en db (chaine de caracteres) en un double MSB/LSB compatible avec le protocole CQ18T)"""
-    # la valeur fader_db est un string car il peut valoir "-inf" ou "off"
-    # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation table_vcvf_fader_hex
-    if fader_db.lower()  == 'off' or fader_db.lower()  == '-inf':
-        return (0x00,0x00)
-    else:
-        vcvf = interpoler_vcvf(table_vcvf_fader_hex, int(fader_db))
-        vcvf14 = convert_hex_to14bits(vcvf)
-        nrpn_msb = vcvf14 & 0xff00
-        nrpn_lsb = vcvf14 & 0x00ff
-        return (nrpn_msb, nrpn_lsb)
-    
-def pan_to_nrpn(pan):
-    """convertit une valeur de pan (chaine de caracteres) en un double MSB/LSB compatible avec le protocole CQ18T)"""
-    # la valeur pan est un string car il peut valoir "center" ou "left 30%", ou "right 50%"
-    # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation table_vcvf_pan_hex
+def get_pan_vcvf(pan):
     
     pan_str = pan.lower().strip()
     if 'center' in pan_str:
-        return (0x40,0x00)
-    
-    match = re.match(r'(left|right)\s*(\d+)\s*%', pan_str)
-    if match:
-        direction = match.group(1)
-        percent = int(match.group(2))
-        val = int(percent * (PAN_CENTER / 100.0))
-        if direction == 'left':
-            val = -1 * percent
+        val = 0
+    else:
+        match = re.match(r'(left|right)\s*(\d+)\s*%', pan_str)
+        if match:
+            direction = match.group(1)
+            percent = int(match.group(2))
+            val = int(percent * (PAN_CENTER / 100.0))
+            if direction == 'left':
+                val = -1 * percent
+            else:
+                val = percent
         else:
-            val = percent
+            val = 0
 
-        vcvf = interpoler_vcvf(table_vcvf_pan_hex, int(val))
-        vcvf14 = convert_hex_to14bits(vcvf)
-        nrpn_msb = vcvf14 & 0xff00
-        nrpn_lsb = vcvf14 & 0x00ff
-        return (nrpn_msb, nrpn_lsb)         
+    vcvf_hex = get_interpolated_value(table_vcvf_pan_hex, float(val))
+    vcvf_14 = convert_hex_to14bits(vcvf_hex)
+    return vcvf_14
 
-    # par defaut, retourner la valeur CENTER
-    return (0x40,0x00)
 
-def nrpn_to_midi_messages(midi_channel, nrpn_msb, nrpn_lsb, value_14bit):
-    """Crée la séquence de 4 messages CC NRPN."""
+# ==============================================================================
+# BUILD MIDI MESSAGES FOR CQ18T
+# ==============================================================================
+
+def cq_get_midi_msg_set_scene(midi_channel, scene_id):
+    channel = midi_channel -1
+    msg = [ 0xB0 | channel, 0x00, 0x00 , 0xC0 | channel , scene_id - 1]
+    return msg
+
+def cq_get_midi_msg_press_softkey(midi_channel, softkey_canonical_name):
+    channel = midi_channel -1
+    softkey_code = get_softkey_midicode_by_name(softkey_canonical_name)
+    if softkey_code == CQ_HEXVALUE_ERROR:
+        return []
+        
+    msg = [ 0x90 | channel, softkey_code, 0x7F , 0x80 | channel , softkey_code, 0x00]
+    return msg
     
-    value_msb = (value_14bit >> 7) & 0x7F # Bits 7-13
-    value_lsb = value_14bit & 0x7F        # Bits 0-6
+def cq_get_midi_msg_set_fader_to_bus(midi_channel, in_canonical_name, bus_canonical_name, value_db):
+    channel = midi_channel -1
 
-    # 1. NRPN MSB (Contrôleur 99)
-    msg1 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 99, nrpn_msb] 
-    # 2. NRPN LSB (Contrôleur 98)
-    msg2 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 98, nrpn_lsb] 
-    # 3. Data Entry MSB (Contrôleur 6)
-    msg3 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 6, value_msb] 
-    # 4. Data Entry LSB (Contrôleur 38)
-    msg4 = [rtmidi.MidiMessage.CONTROLLER | midi_channel-1, 38, value_lsb]
+    fader_vcvf_14 = get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name)
+    if fader_vcvf_14 == CQ_HEXVALUE_ERROR:
+        return []
 
-    return [msg1, msg2, msg3, msg4]
+    fader_msb = (fader_vcvf_14 & 0x7F00) >> 8
+    fader_lsb = fader_vcvf_14 & 0x007F
+    
+    value_vcvf_14 = get_fader_vcvf(value_db)
+    value_msb = (value_vcvf_14 & 0x7F00) >> 8
+    value_lsb = value_vcvf_14 & 0x007F
+
+
+    msg = [ 0xB0 | channel, 0x63, fader_msb, 
+            0xB0 | channel, 0x62, fader_lsb, 
+            0xB0 | channel, 0x06, value_msb, 
+            0xB0 | channel, 0x26, value_lsb
+          ]
+    return msg
+    
+def cq_get_midi_msg_set_pan_to_bus(midi_channel, in_canonical_name, bus_canonical_name, pan):
+    channel = midi_channel -1
+    
+    pan_vcvf_14 = get_pan_to_bus_vcvf(in_canonical_name, bus_canonical_name)
+    if pan_vcvf_14 == CQ_HEXVALUE_ERROR:
+        return []
+
+    pan_msb = (pan_vcvf_14 & 0x7F00) >> 8
+    pan_lsb = pan_vcvf_14 & 0x007F
+    
+    value_vcvf_14 = get_pan_vcvf(pan)
+    value_msb = (value_vcvf_14 & 0x7F00) >> 8
+    value_lsb = value_vcvf_14 & 0x007F
+
+    if pan_vcvf_14 == 0x0000:
+        return []
+
+    msg = [ 0xB0 | channel, 0x63, fader_msb, 
+            0xB0 | channel, 0x62, fader_lsb, 
+            0xB0 | channel, 0x06, value_msb, 
+            0xB0 | channel, 0x26, value_lsb
+          ]
+    return msg
+
+def cq_get_midi_msg_set_bus_fader(midi_channel, bus_canonical_name, value_db):
+    channel = midi_channel -1
+
+    fader_vcvf_14 = get_fader_vcvf(bus_canonical_name)
+    if fader_vcvf_14 == CQ_HEXVALUE_ERROR:
+        return []
+
+    fader_msb = (fader_vcvf_14 & 0x7F00) >> 8
+    fader_lsb = fader_vcvf_14 & 0x007F
+    
+    value_vcvf_14 = get_fader_vcvf(value_db)
+    value_msb = (value_vcvf_14 & 0x7F00) >> 8
+    value_lsb = value_vcvf_14 & 0x007F
+
+
+    msg = [ 0xB0 | channel, 0x63, fader_msb, 
+            0xB0 | channel, 0x62, fader_lsb, 
+            0xB0 | channel, 0x06, value_msb, 
+            0xB0 | channel, 0x26, value_lsb
+          ]
+    return msg
+
+def cq_get_midi_msg_set_mute_channel(midi_channel, channel_canonical_name, mute_on):
+    channel = midi_channel -1
+
+    mute_vcvf_14 = get_fader_vcvf(bus_canonical_name)
+    if mute_vcvf_14 == CQ_HEXVALUE_ERROR:
+        return []
+
+    mute_msb = (mute_vcvf_14 & 0x7F00) >> 8
+    mute_lsb = mute_vcvf_14 & 0x007F
+
+    mute_val = 0x00
+    if mute_on:
+        mute_val = 0x01
+    
+    msg = [ 0xB0 | channel, 0x63, fader_msb, 
+            0xB0 | channel, 0x62, fader_lsb, 
+            0xB0 | channel, 0x06, 0x00, 
+            0xB0 | channel, 0x26, mute_val
+          ]
+    return msg
+
+def cq_get_midi_tap_tempo(midi_channel, softkey_canonical_name):
+    return cq_get_midi_msg_press_softkey(midi_channel, softkey_canonical_name)
+
+
+
+# ==============================================================================
+# INITIALISATION DU MODULE
+# ==============================================================================
+
+if __name__ == '__main__':
+    print(f"/!/ ERROR: This module cannot be used in standalone")
+    exit(1)
+
+# prépare les tables d'interpolation pour la console CQ18T
+compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
+compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
+
+
 
