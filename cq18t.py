@@ -28,18 +28,23 @@ def dec_to_hex_16bit(dec_value):
     # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
     return f'{dec_value:04X}'
     
-def convert_hex_to14bits(value16):
+def convert_hex_to_14bits(value16):
     # les valeurs MIDI sont codées sur des octets de 7 bits
-    msb = int((value16 & 0xff00)*2 + (value16 & 0x80)*2))
+    msb = int(value16 & 0x3F80) >> 7
     lsb = int(value16 & 0x7f)
-    return msb*0x100 + lsb
+    
+    value14 = (msb << 8) + lsb
+    
+    return value14
         
 def convert_14bits_to_hex(value14):
     # les valeurs dans les tables d'interpolation de la doc CQ18 sont codées sur 2 octets de 7 bits (MIDI)
-    msb = int((value14 & 0xff00) / 0x200)
-    lsb = int((value14 & 0x7f) + ((value14 & 0x0100)/2))
-    return msb * 0x100 + lsb
-
+    msb = int(value14 & 0x7f00) >> 8
+    lsb = int(value14 & 0x007f)
+    
+    value16 = (msb << 7) + lsb
+    return value16
+    
 def compute_table_val14_to_hex(table_hex, table_val14):
     table_hex = []
     for dec_value, val14 in table_val14:
@@ -185,7 +190,7 @@ CQ_MUTE_CHANNELS_MAP = {
     # Sorties Bus mix
     'MAIN':   0x0044,
     'OUT1':   0x0045, 'OUT2':    0x0046, 'OUT3':    0x0047, 'OUT4':    0x0048, 'OUT5':    0x0049, 'OUT6':    0x004A, 
-    'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049
+    'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049,
     
     # MIX GROUPS
     'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP3':  0x0403, 
@@ -269,31 +274,31 @@ def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
     
     if bus_type == 'MAIN':
+        bus_number = 1 # to compensate the -1 when computing fader_vcvf_hex
         try:
-            in_index_hex = CQ_FADER_TO_MAIN_MAP[in_canonical_name]
+            in_index_14 = CQ_FADER_TO_MAIN_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
 
     elif bus_type == 'OUT': 
         try:
-            in_index_hex = CQ_FADER_TO_OUT_MAP[in_canonical_name]
+            in_index_14 = CQ_FADER_TO_OUT_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
             
     elif bus_type == 'FX': 
         try:
-            in_index_hex = CQ_FADER_TO_FX_MAP[in_canonical_name]
+            in_index_14 = CQ_FADER_TO_FX_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
             
     else:
-        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
+        print(f"/!/ internal ERROR: invalid bus_index for {bus_canonical_name}")
         return CQ_HEXVALUE_ERROR
 
-    in_index_14 = convert_14bits_to_hex(in_index_hex)
-
-    fader_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
-    fader_vcvf_14 = convert_hex_to14bits(fader_vcvf_hex)
+    in_index_hex = convert_14bits_to_hex(in_index_14)
+    fader_vcvf_hex = in_index_hex + bus_number - 1
+    fader_vcvf_14 = convert_hex_to_14bits(fader_vcvf_hex)
     
     return fader_vcvf_14
 
@@ -375,24 +380,25 @@ def get_pan_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
     
     if bus_type == 'MAIN':
+        bus_number = 1 # to compensate the -1 when computing pan_vcvf_hex
         try:
-            in_index_hex = CQ_PAN_TO_MAIN_MAP[in_canonical_name]
+            in_index_14 = CQ_PAN_TO_MAIN_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
             
     elif bus_type == 'OUT': 
         try:
-            in_index_hex = CQ_PAN_TO_OUT_MAP[in_canonical_name]
+            in_index_14 = CQ_PAN_TO_OUT_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
             
     else:
-        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
+        print(f"/!/ internal ERROR: invalid bus_index for {bus_canonical_name}")
         return CQ_HEXVALUE_ERROR
 
-    in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_OUT_MAP[in_canonical_name])
-    pan_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
-    pan_vcvf_14 = convert_hex_to14bits(pan_vcvf_hex)
+    in_index_hex = convert_14bits_to_hex(in_index_14)
+    pan_vcvf_hex = in_index_hex + bus_number - 1
+    pan_vcvf_14 = convert_hex_to_14bits(pan_vcvf_hex)
     
     return pan_vcvf_14
 
@@ -420,10 +426,10 @@ table_vcvf_fader_hex = []
 def get_fader_vcvf(value_db):
     
     if value_db == '-inf' or value_db == 'off':
-        return CQ_HEXVALUE_ERROR
+        return 0x0000
     
     vcvf_hex = get_interpolated_value(float(value_db))
-    vcvf_14 = convert_hex_to14bits(vcvf_hex)
+    vcvf_14 = convert_hex_to_14bits(vcvf_hex)
     
     return vcvf_14 
 
@@ -460,7 +466,7 @@ def get_pan_vcvf(pan):
             val = 0
 
     vcvf_hex = get_interpolated_value(table_vcvf_pan_hex, float(val))
-    vcvf_14 = convert_hex_to14bits(vcvf_hex)
+    vcvf_14 = convert_hex_to_14bits(vcvf_hex)
     return vcvf_14
 
 
