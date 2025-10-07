@@ -45,7 +45,7 @@ def convert_14bits_to_hex(value14):
     value16 = (msb << 7) + lsb
     return value16
     
-def compute_table_val14_to_hex(table_hex, table_val14):
+def compute_table_val14_to_hex(table_val14):
     table_hex = []
     for dec_value, val14 in table_val14:
         # 1. Calcul de la valeur entière 16 bits
@@ -54,6 +54,8 @@ def compute_table_val14_to_hex(table_hex, table_val14):
         # 2. Ajout du nouveau doublet à la table finale
         table_hex.append([dec_value, val16])        
         
+    return table_hex
+    
 def extraire_chaine_et_nombre(s):
     match = re.match(r"([A-Z]+)(\d*)", s)
     if match:
@@ -64,82 +66,77 @@ def extraire_chaine_et_nombre(s):
         return s, 0
         
         
-# TODO : Fonction à revoir pour supprimer la notion de VCVF
-def get_interpolated_value(table_interpolation, valeur_entree):
+def get_interpolated_value(table_valeurs, x_cible):
     """
-    Calcule une valeur interpolée à partir d'une table avec une colonne de valeurs en hexadécimal 16 bits.
+    Effectue une interpolation linéaire sur une table de valeurs et 
+    retourne le résultat arrondi à l'entier le plus proche.
 
     Args:
-        table_interpolation (list): Liste de listes/tuples, par ex. [[X1, Y1, VCVF_HEX1], [X2, VCVF_DEC2, VCVF_HEX2], ...]
-            La 3ème colonne (VCVF_HEX) est ignorée si elle est passée, mais une table formatée avec 3 colonnes est acceptée.
-            Les colonnes 0 (X) et 1 (VCVF_DEC) doivent être des nombres.
-        valeur_entree (float): La valeur X pour laquelle on cherche le VCVF interpolé.
+        table_valeurs (list of tuple): Une liste de tuples (x, y) représentant 
+                                       la table de valeurs. La liste doit être 
+                                       triée par ordre croissant de x.
+        x_cible (float): La valeur x pour laquelle on cherche la valeur y interpolée.
 
     Returns:
-        str: La valeur VCVF interpolée, arrondie à l'entier le plus proche et formatée en hexadécimal 16 bits (4 chiffres).
+        int: La valeur y interpolée, arrondie à l'entier.
+
+    Raises:
+        ValueError: Si x_cible est en dehors de la plage des x dans la table.
     """
+    
+    # 1. Vérification des limites
+    x_min = table_valeurs[0][0]
+    x_max = table_valeurs[-1][0]
+    
+    if x_cible < x_min:
+        x_cible = x_min
+        
+    if x_cible > x_max:
+        x_cible = x_max
+        
+#    if not (x_min <= x_cible <= x_max):
+#        raise ValueError(f"La valeur cible ({x_cible}) est hors de la plage des x ({x_min} à {x_max}).")
 
-    # 1. Préparation des données pour numpy.interp
-    # Extraction des colonnes X et VCVF (en décimal)
-    xp = np.array([row[0] for row in table_interpolation]) # Colonne des valeurs recherchées (X)
-    
-    # On suppose que la colonne VCVF (colonne 2) est en hexadécimal et doit être convertie.
-    # On utilise un test pour savoir si la colonne VCVF est déjà en décimal ou en hexadécimal string
-    # Si la colonne est déjà numérique (float/int), on l'utilise directement (colonne 1).
-    # Sinon, on prend la colonne 2 et on la convertit.
-    
-    try:
-        # Test si la 2ème colonne (indice 1) est déjà numérique
-        # Cela suppose que si la table a 3 colonnes, les colonnes sont [X, VCVF_DEC, VCVF_HEX]
-        # Dans ce cas, nous devons utiliser la colonne 2 (indice 2) pour l'hexadécimal ou la colonne 1 (indice 1) si elle a été pré-convertie.
-        # Pour être plus robuste, nous allons forcer l'extraction des données X et Y (VCVF)
+    # 2. Recherche des points encadrants (x1, y1) et (x2, y2)
+    x1, y1 = None, None
+    x2, y2 = None, None
+
+    # Parcourir la table pour trouver les deux points (x1, y1) et (x2, y2) qui encadrent x_cible
+    for i in range(len(table_valeurs) - 1):
+        x_i, y_i = table_valeurs[i]
+        x_i1, y_i1 = table_valeurs[i+1]
         
-        # Nous allons supposer que la colonne des valeurs recherchées (X) est la première (indice 0) 
-        # et que la colonne VCVF (la valeur à interpoler) est la deuxième (indice 1).
-        # Si VCVF est un string, c'est l'hexadécimal et on doit convertir.
-        
-        y_raw = [row[1] for row in table_interpolation]
-        
-        if isinstance(y_raw[0], str):
-            # La colonne VCVF est une chaîne hexa, on la convertit en décimal
-            yp = np.array([hex_to_dec(h) for h in y_raw])
-        else:
-            # La colonne VCVF est déjà numérique (décimal)
-            yp = np.array(y_raw)
+        if x_i <= x_cible <= x_i1:
+            x1, y1 = x_i, y_i
+            x2, y2 = x_i1, y_i1
+            break
             
-    except (IndexError, TypeError, ValueError) as e:
-        print(f"Erreur lors du traitement de la table : {e}. Assurez-vous que la table a au moins 2 colonnes où la 1ère est la valeur X et la 2ème est la valeur VCVF (décimale ou hexadécimale string).")
-        return "ERREUR"
+    # Cas où x_cible correspond exactement à un point de la table
+    if x1 is None:
+        if x_cible == x_min:
+            return int(round(y1))
+        elif x_cible == x_max:
+             return int(round(y2))
+        # Si x_cible est à la dernière valeur, mais la boucle ne l'a pas trouvé (ne devrait pas arriver avec les vérifs)
+        elif x_cible == table_valeurs[-1][0]:
+            return int(round(table_valeurs[-1][1]))
+        else:
+            # Cette erreur ne devrait pas se produire si les vérifications initiales sont correctes
+            raise Exception("Erreur interne lors de la recherche des points.")
 
-
-    # 2. Définition des bornes d'extrapolation
-    # Selon la demande:
-    # Si < min(X), retourne VCVF min (yp[0])
-    # Si > max(X), retourne VCVF max (yp[-1])
-    # C'est la gestion par défaut de np.interp qui n'est pas tout à fait celle demandée (np.interp utilise les bornes pour l'interpolation)
-    # L'option fill_value=(yp[0], yp[-1]), bounds_error=False de interp1d est plus explicite.
+    # 3. Calcul de l'interpolation linéaire
     
-    # Pour respecter EXACTEMENT la règle (valeur MIN/MAX en cas d'extrapolation),
-    # nous utilisons une approche manuelle ou la fonction `np.interp` mais en bornant l'entrée.
-    
-    # Avec np.interp, nous avons la gestion native de l'interpolation.
-    # Pour l'extrapolation :
-    # Si l'entrée est hors limites, nous renvoyons les valeurs aux extrémités.
-
-    if valeur_entree <= xp[0]:
-        valeur_vcvf_dec = yp[0]
-    elif valeur_entree >= xp[-1]:
-        valeur_vcvf_dec = yp[-1]
+    # Éviter la division par zéro si les points sont identiques (ce qui signifie x_cible=x1=x2)
+    if x2 - x1 == 0:
+        y_interpole = y1
     else:
-        # Interpolation linéaire
-        # y = np.interp(x, xp, fp)
-        # x est la valeur à évaluer (valeur_entree)
-        # xp est le tableau des points d'abscisse (valeur recherchée)
-        # fp est le tableau des valeurs à interpoler (VCVF)
-        valeur_vcvf_dec = np.interp(valeur_entree, xp, yp)
+        # Formule de l'interpolation linéaire : 
+        # y = y1 + (y2 - y1) * (x_cible - x1) / (x2 - x1)
+        y_interpole = y1 + (y2 - y1) * (x_cible - x1) / (x2 - x1)
 
-    # 3. Formatage de la sortie
-    return dec_to_hex_16bit(valeur_vcvf_dec)
+    # 4. Retourner la valeur arrondie à l'entier (selon la demande)
+    return int(round(y_interpole))
+    
         
 # ==============================================================================
 # TABLES DE VALEURS CQ18T
@@ -198,6 +195,18 @@ CQ_MUTE_CHANNELS_MAP = {
     # DCA
     'DCA1':   0x0200, 'DCA2':    0x0201, 'DCA3':    0x0202, 'DCA4':    0x0203
 }
+
+def get_channel_mute_vcvf(channel_canonical_name):
+    """
+    Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
+    Fonction utile pour piloter le niveau des bus (par exemple, la sortie MAIN générale)
+    """
+    try:
+        ch_index_hex = CQ_MUTE_CHANNELS_MAP[channel_canonical_name]
+    except:
+        return CQ_HEXVALUE_ERROR
+        
+    return ch_index_hex
 
 # ==============================================================================
 # INPUT FADERS (TO MAIN, OUTx and FXx)
@@ -425,10 +434,16 @@ table_vcvf_fader_hex = []
 
 def get_fader_vcvf(value_db):
     
+    global table_vcvf_fader_hex
+
+    # initialize the PAN table if not already done
+    if len(table_vcvf_fader_hex) == 0:
+        table_vcvf_fader_hex = compute_table_val14_to_hex(TABLE_VCVF_FADER_VAL14)
+        
     if value_db == '-inf' or value_db == 'off':
         return 0x0000
     
-    vcvf_hex = get_interpolated_value(float(value_db))
+    vcvf_hex = get_interpolated_value(table_vcvf_fader_hex, float(value_db))
     vcvf_14 = convert_hex_to_14bits(vcvf_hex)
     
     return vcvf_14 
@@ -448,7 +463,12 @@ TABLE_VCVF_PAN_VAL14 = [
 table_vcvf_pan_hex = []
 
 def get_pan_vcvf(pan):
+    global table_vcvf_pan_hex
     
+    # initialize the PAN table if not already done
+    if len(table_vcvf_pan_hex) == 0:
+        table_vcvf_pan_hex = compute_table_val14_to_hex(TABLE_VCVF_PAN_VAL14)        
+        
     pan_str = pan.lower().strip()
     if 'center' in pan_str:
         val = 0
@@ -457,7 +477,6 @@ def get_pan_vcvf(pan):
         if match:
             direction = match.group(1)
             percent = int(match.group(2))
-            val = int(percent * (PAN_CENTER / 100.0))
             if direction == 'left':
                 val = -1 * percent
             else:
@@ -527,8 +546,8 @@ def cq_get_midi_msg_set_pan_to_bus(midi_channel, in_canonical_name, bus_canonica
     if pan_vcvf_14 == 0x0000:
         return []
 
-    msg = [ 0xB0 | channel, 0x63, fader_msb, 
-            0xB0 | channel, 0x62, fader_lsb, 
+    msg = [ 0xB0 | channel, 0x63, pan_msb, 
+            0xB0 | channel, 0x62, pan_lsb, 
             0xB0 | channel, 0x06, value_msb, 
             0xB0 | channel, 0x26, value_lsb
           ]
@@ -537,7 +556,7 @@ def cq_get_midi_msg_set_pan_to_bus(midi_channel, in_canonical_name, bus_canonica
 def cq_get_midi_msg_set_bus_fader(midi_channel, bus_canonical_name, value_db):
     channel = midi_channel -1
 
-    fader_vcvf_14 = get_fader_vcvf(bus_canonical_name)
+    fader_vcvf_14 = get_bus_fader_vcvf(bus_canonical_name)
     if fader_vcvf_14 == CQ_HEXVALUE_ERROR:
         return []
 
@@ -559,7 +578,7 @@ def cq_get_midi_msg_set_bus_fader(midi_channel, bus_canonical_name, value_db):
 def cq_get_midi_msg_set_mute_channel(midi_channel, channel_canonical_name, mute_on):
     channel = midi_channel -1
 
-    mute_vcvf_14 = get_fader_vcvf(bus_canonical_name)
+    mute_vcvf_14 = get_channel_mute_vcvf(channel_canonical_name)
     if mute_vcvf_14 == CQ_HEXVALUE_ERROR:
         return []
 
@@ -570,8 +589,8 @@ def cq_get_midi_msg_set_mute_channel(midi_channel, channel_canonical_name, mute_
     if mute_on:
         mute_val = 0x01
     
-    msg = [ 0xB0 | channel, 0x63, fader_msb, 
-            0xB0 | channel, 0x62, fader_lsb, 
+    msg = [ 0xB0 | channel, 0x63, mute_msb, 
+            0xB0 | channel, 0x62, mute_lsb, 
             0xB0 | channel, 0x06, 0x00, 
             0xB0 | channel, 0x26, mute_val
           ]
@@ -591,8 +610,7 @@ if __name__ == '__main__':
     exit(1)
 
 # prépare les tables d'interpolation pour la console CQ18T
-compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
-compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
+
 
 
 
