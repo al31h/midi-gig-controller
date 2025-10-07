@@ -1,13 +1,7 @@
 # cq18t.py library
 import re
-import rtmidi
-
-# --- Constantes du Protocole Allen & Heath CQ ---
-# RAPPEL : CES VALEURS DOIVENT ÊTRE CONFIRMÉES PAR LE MANUEL OFFICIEL CQ-18T !
-CQ_MIDI_CHANNEL = 1  # Le CQ utilise par défaut le Canal 1 (0 en indexation 0)
 
 CQ_HEXVALUE_ERROR = 0xFFFF  # valeur impossible car les valeurs transmises sur MIDI sont sur 7 bits
-
 
 # ==============================================================================
 # FONCTIONS GENERIQUES
