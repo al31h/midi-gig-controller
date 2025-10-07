@@ -1,110 +1,9 @@
 # cq18t.py library
+import re
 
 # --- Constantes du Protocole Allen & Heath CQ ---
 # RAPPEL : CES VALEURS DOIVENT ÊTRE CONFIRMÉES PAR LE MANUEL OFFICIEL CQ-18T !
 CQ_MIDI_CHANNEL = 1  # Le CQ utilise par défaut le Canal 1 (0 en indexation 0)
-
-
-# ==============================================================================
-# TABLES DE VALEURS CQ18T
-# Issues de la documentation MIDI Protocol V1.2
-# ==============================================================================
-CQ_TABLE_SOFTKEYS_MAP = [
-    [1, 'C3",  0x30],
-    [2, 'C#3", 0x31],
-    [3, 'D3",  0x32]
-]
-
-# Calcul des valeurs VC/VF nécessaire au contrôle des faders de la CQ18T et des PAN
-# Les 2 tables "VAL14" contiennent les valeurs définies dans la doc A&H Protocole MIDI
-# Elles sont codées sous forme de 2 octets de 7 bits (compatibilité MIDI)
-TABLE_VCVF_FADER_VAL14 = [
-    [-89, 0x0140], [-85, 0x0200], [-80, 0x0240], [-75, 0x0300], [-70, 0x0400], [-65, 0x0500], [-60, 0x0600], [-55, 0x0700],
-    [-50, 0x0800], [-45, 0x0C00], [-40, 0x0F40], [-38, 0x1240], [-36, 0x1540], [-35, 0x1700], [-34, 0x1900], [-33, 0x1A00],
-    [-32, 0x1C00], [-31, 0x1D40], [-30, 0x1F00], [-29, 0x2040], [-28, 0x2200], [-27, 0x2340], [-26, 0x2500], [-25, 0x2640],
-    [-24, 0x2840], [-23, 0x2A00], [-22, 0x2B40], [-21, 0x2D00], [-20, 0x2E40], [-19, 0x3000], [-18, 0x3140], [-17, 0x3300],
-    [-16, 0x3440], [-15, 0x3600], [-14, 0x3800], [-13, 0x3940], [-12, 0x3B00], [-11, 0x3C40], [-10, 0x3E00], [-9,  0x4140],
-    [-8,  0x4440], [-7,  0x4800], [-6,  0x4B00], [-5,  0x4E40], [-4,  0x5240], [-3,  0x5640], [-2,  0x5A00], [-1,  0x5E00],
-    [0,   0x6200], [1,   0x6540], [2,   0x6900], [3,   0x6C40], [4,   0x7000], [5,   0x7340], [6,   0x7540], [7,   0x7800],
-    [8,   0x7A40], [9,   0x7D00], [10,  0x7F40]
-]
-
-TABLE_VCVF_PAN_VAL14 = [
-    [-100, 0x0000], [-90, 0x0633], [-80, 0x0C66], [-70, 0x1319], [-60, 0x194C], [-50, 0x1F7F], [-40, 0x2632], [-30, 0x2C65],
-    [-20,  0x3318], [-15, 0x3632], [-10, 0x394B], [-5,  0x3C65], [0,   0x4000], [5,   0x4318], [10,  0x4632], [15,  0x494B],
-    [20,   0x4C65], [30,  0x5318], [40, 0x594B],  [50,  0x5F7F], [60,  0x6632], [60,  0x6632], [70,  0x6C65], [80,  0x7318],
-    [90,   0x764B], [100, 0x7F7F]
-]
-
-CQ_MUTE_CHANNELS_MAP = {
-    # 16 Canaux Mono (IN1-IN16) 
-    'IN1':    0x0000, 'IN2':     0x0001, 'IN3':     0x0002, 'IN4':     0x0003, 
-    'IN5':    0x0004, 'IN6':     0x0005, 'IN7':     0x0006, 'IN8':     0x0007, 
-    'IN9':    0x0008, 'IN10':    0x0009, 'IN11':    0x000A, 'IN12':    0x000B, 
-    'IN13':   0x000C, 'IN14':    0x000D, 'IN15':    0x000E, 'IN16':    0x000F,
-
-    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
-    'ST1/2':  0x0000, 'ST3/4':   0x0002, 'ST5/6':   0x0004, 'ST7/8':   0x0006, 
-    'ST9/10': 0x0008, 'ST11/12': 0x000A, 'ST13/14': 0x000C, 'ST15/16': 0x000E,
-
-    # Entrées Stéréo Dédiées et Retours Numériques
-    'ST1':    0x0018,     # ST17/18
-    'ST2':    0x001A,
-    'USB':    0x001C,     # USB 
-    'BT':     0x001E,     # Bluetooth
-    
-    # Sorties Bus FX
-    'FX1':    0x0051, 'FX2':     0x0052, 'FX3':     0x0053, 'FX4':     0x0054, 
-    
-    # Sorties Bus mix
-    'MAIN':   0x0044,
-    'OUT1':   0x0045, 'OUT2':    0x0046, 'OUT3':    0x0047, 'OUT4':    0x0048, 'OUT5':    0x0049, 'OUT6':    0x004A, 
-    'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049
-    
-    # MIX GROUPS
-    'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP3':  0x0403, 
-    
-    # DCA
-    'DCA1':   0x0200, 'DCA2':    0x0201, 'DCA3':    0x0202, 'DCA4':    0x0203
-}
-
-CQ_FADER_CHANNELS_MAP = {
-    # 16 Canaux Mono (IN1-IN16) 
-    'IN1':    0x4000, 'IN2':     0x4001, 'IN3':     0x4002, 'IN4':     0x4003, 
-    'IN5':    0x4004, 'IN6':     0x4005, 'IN7':     0x4006, 'IN8':     0x4007, 
-    'IN9':    0x4008, 'IN10':    0x4009, 'IN11':    0x400A, 'IN12':    0x400B, 
-    'IN13':   0x400C, 'IN14':    0x400D, 'IN15':    0x400E, 'IN16':    0x400F,
-
-    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
-    'ST1/2':  0x4000, 'ST3/4':   0x4002, 'ST5/6':   0x4004, 'ST7/8':   0x4006, 
-    'ST9/10': 0x4008, 'ST11/12': 0x400A, 'ST13/14': 0x400C, 'ST15/16': 0x400E,
-
-    # Entrées Stéréo Dédiées et Retours Numériques
-    'ST1':    0x4018,     # ST17/18
-    'ST2':    0x401A,
-    'USB':    0x401C,     # USB 
-    'BT':     0x401E,     # Bluetooth
-    
-    # Sorties Bus FX
-    'FX1':    0x403C, 'FX2':     0x403D, 'FX3':     0x403E, 'FX4':     0x403F   
-}
-
-
-# Mappage des bus de sortie
-#### Ce map est une base de calcul pour la fonction get_fader_index
-SEND_BUS_MAP = {
-    'FX1':  0x14, # canal pour le send IN01 vers FX1
-    'FX2':  0x15, # canal pour le send IN01 vers FX2
-    'FX3':  0x16, # canal pour le send IN01 vers FX3
-    'FX4':  0x17, # canal pour le send IN01 vers FX4
-    'MAIN': 0x00, # canal pour le send IN01 vers MAIN
-    'OUT1': 0x44, # canal pour le send IN01 vers OUT1
-    'OUT2': 0x45, # canal pour le send IN01 vers OUT2
-    'OUT3': 0x46, # canal pour le send IN01 vers OUT3
-    'OUT4': 0x47, # canal pour le send IN01 vers OUT4
-    'OUT5': 0x48, # canal pour le send IN01 vers OUT5
-    'OUT6': 0x49, # canal pour le send IN01 vers OUT6
-}
 
 # ==============================================================================
 # FONCTIONS GENERIQUES
@@ -122,39 +21,6 @@ def convert_14bits_to_hex(value14):
     lsb = int((value14 & 0x7f) + ((value14 & 0x0100)/2))
     return msb * 0x100 + lsb
 
-# ==============================================================================
-# FONCTIONS SPECIFIQUES CQ18T 
-# ==============================================================================
-    
-def get_fader_index(in_canonical_name, bus_canonical_name):
-    """Retourne un integer sur 16 bits utilisé pour les commandes de fader - cf protocole MIDI page 17"""
-    # Exemple : in_send_bus("IN3", "OUT4") doit retourner 0x405F
-    in_index = CQ_CHANNEL_MAP[in_canonical_name]
-    bus_index = SEND_BUS_MAP[bus_canonical_name]
-    
-    if bus_index == 0x00: # main
-        fader_index = 0x4000 + in_index
-    elif bus_index >= 0x14 and bus_index <= 0x17: # FX
-        fader_index = 0x4C14 + in_index*4 + (bus_index-0x14)
-    elif bus_index >= 0x44 and bus_index <= 0x49: # OUT
-        fader_index = 0x4044 + in_index*12 + (bus_index-0x44)
-    else:
-        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
-        fader_index = 0
-
-    msb = int((fader_index & 0xff00) + (fader_index & 0x80)*2))
-    lsb = int(fader_index & 0x7f)
-    return msb*0x100 + lsb
-
-
-
-# tables globales : valeurs VCVF recalculées en hexa sur 16 bits pour permettre les calculs d'interpolation
-table_vcvf_fader_hex = []
-table_vcvf_pan_hex = []
-
-# compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
-# compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
-
 def compute_table_val14_to_hex(table_hex, table_val14):
     table_hex = []
     for dec_value, val14 in table_val14:
@@ -164,27 +30,23 @@ def compute_table_val14_to_hex(table_hex, table_val14):
         # 2. Ajout du nouveau doublet à la table finale
         table_hex.append([dec_value, val16])        
         
-def hex_to_dec(hex_value):
-    """Convertit une chaîne hexadécimale en entier décimal."""
-    # La fonction int() avec base 16 gère la conversion.
-    # On ajoute le préfixe '0x' si manquant pour plus de robustesse.
-    if not hex_value.startswith('0x') and not hex_value.startswith('0X'):
-        hex_value = '0x' + hex_value
-    return int(hex_value, 16)
-
-def dec_to_hex_16bit(dec_value):
-    """Convertit un entier décimal en chaîne hexadécimale de 16 bits (4 caractères)."""
-    # On s'assure que la valeur reste dans la plage 16 bits (0 à 65535)
-    dec_value = max(0, min(65535, round(dec_value)))
-    # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
-    return f'{dec_value:04X}'
-    
-def interpoler_vcvf(table_interpolation, valeur_entree):
+def extraire_chaine_et_nombre(s):
+    match = re.match(r"([A-Z]+)(\d*)", s)
+    if match:
+        lettres = match.group(1)
+        nombre = int(match.group(2)) if match.group(2) else 0
+        return lettres, nombre
+    else:
+        return s, 0
+        
+        
+# TODO : Fonction à revoir pour supprimer la notion de VCVF
+def get_interpolated_value(table_interpolation, valeur_entree):
     """
-    Calcule une valeur interpolée à partir d'une table avec une colonne VCVF en hexadécimal 16 bits.
+    Calcule une valeur interpolée à partir d'une table avec une colonne de valeurs en hexadécimal 16 bits.
 
     Args:
-        table_interpolation (list): Liste de listes/tuples, par ex. [[X1, VCVF_DEC1, VCVF_HEX1], [X2, VCVF_DEC2, VCVF_HEX2], ...]
+        table_interpolation (list): Liste de listes/tuples, par ex. [[X1, Y1, VCVF_HEX1], [X2, VCVF_DEC2, VCVF_HEX2], ...]
             La 3ème colonne (VCVF_HEX) est ignorée si elle est passée, mais une table formatée avec 3 colonnes est acceptée.
             Les colonnes 0 (X) et 1 (VCVF_DEC) doivent être des nombres.
         valeur_entree (float): La valeur X pour laquelle on cherche le VCVF interpolé.
@@ -254,6 +116,282 @@ def interpoler_vcvf(table_interpolation, valeur_entree):
 
     # 3. Formatage de la sortie
     return dec_to_hex_16bit(valeur_vcvf_dec)
+        
+# ==============================================================================
+# TABLES DE VALEURS CQ18T
+# Issues de la documentation MIDI Protocol V1.2
+# ==============================================================================
+CQ_TABLE_SOFTKEYS_MAP = [
+    [1, 'C3",  0x30],
+    [2, 'C#3", 0x31],
+    [3, 'D3",  0x32]
+]
+
+
+# ==============================================================================
+# MUTE
+# ==============================================================================
+CQ_MUTE_CHANNELS_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x0000, 'IN2':     0x0001, 'IN3':     0x0002, 'IN4':     0x0003, 
+    'IN5':    0x0004, 'IN6':     0x0005, 'IN7':     0x0006, 'IN8':     0x0007, 
+    'IN9':    0x0008, 'IN10':    0x0009, 'IN11':    0x000A, 'IN12':    0x000B, 
+    'IN13':   0x000C, 'IN14':    0x000D, 'IN15':    0x000E, 'IN16':    0x000F,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x0000, 'ST3/4':   0x0002, 'ST5/6':   0x0004, 'ST7/8':   0x0006, 
+    'ST9/10': 0x0008, 'ST11/12': 0x000A, 'ST13/14': 0x000C, 'ST15/16': 0x000E,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x0018,     # ST17/18
+    'ST2':    0x001A,
+    'USB':    0x001C,     # USB 
+    'BT':     0x001E,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x0051, 'FX2':     0x0052, 'FX3':     0x0053, 'FX4':     0x0054, 
+    
+    # Sorties Bus mix
+    'MAIN':   0x0044,
+    'OUT1':   0x0045, 'OUT2':    0x0046, 'OUT3':    0x0047, 'OUT4':    0x0048, 'OUT5':    0x0049, 'OUT6':    0x004A, 
+    'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049
+    
+    # MIX GROUPS
+    'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP3':  0x0403, 
+    
+    # DCA
+    'DCA1':   0x0200, 'DCA2':    0x0201, 'DCA3':    0x0202, 'DCA4':    0x0203
+}
+
+# ==============================================================================
+# INPUT FADERS (TO MAIN, OUTx and FXx)
+# ==============================================================================
+CQ_FADER_TO_MAIN_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x4000, 'IN2':     0x4001, 'IN3':     0x4002, 'IN4':     0x4003, 
+    'IN5':    0x4004, 'IN6':     0x4005, 'IN7':     0x4006, 'IN8':     0x4007, 
+    'IN9':    0x4008, 'IN10':    0x4009, 'IN11':    0x400A, 'IN12':    0x400B, 
+    'IN13':   0x400C, 'IN14':    0x400D, 'IN15':    0x400E, 'IN16':    0x400F,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x4000, 'ST3/4':   0x4002, 'ST5/6':   0x4004, 'ST7/8':   0x4006, 
+    'ST9/10': 0x4008, 'ST11/12': 0x400A, 'ST13/14': 0x400C, 'ST15/16': 0x400E,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x4018,     # ST17/18
+    'ST2':    0x401A,
+    'USB':    0x401C,     # USB 
+    'BT':     0x401E,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x403C, 'FX2':     0x403D, 'FX3':     0x403E, 'FX4':     0x403F   
+}
+
+CQ_FADER_TO_OUT_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x4044, 'IN2':     0x4050, 'IN3':     0x405C, 'IN4':     0x4068, 
+    'IN5':    0x4074, 'IN6':     0x4100, 'IN7':     0x410C, 'IN8':     0x4118, 
+    'IN9':    0x4124, 'IN10':    0x4130, 'IN11':    0x413C, 'IN12':    0x4148, 
+    'IN13':   0x4154, 'IN14':    0x4160, 'IN15':    0x416C, 'IN16':    0x4178,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x4044, 'ST3/4':   0x405C, 'ST5/6':   0x4074, 'ST7/8':   0x410C, 
+    'ST9/10': 0x4124, 'ST11/12': 0x413C, 'ST13/14': 0x4154, 'ST15/16': 0x416C,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x4264,     # ST17/18
+    'ST2':    0x427C,
+    'USB':    0x4314,     # USB 
+    'BT':     0x432C,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x4614, 'FX2':     0x4620, 'FX3':     0x462C, 'FX4':     0x4638   
+}
+
+CQ_FADER_TO_FX_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x4C14, 'IN2':     0x4C18, 'IN3':     0x4C1C, 'IN4':     0x4C20, 
+    'IN5':    0x4C24, 'IN6':     0x4C28, 'IN7':     0x4C2C, 'IN8':     0x4C30, 
+    'IN9':    0x4C34, 'IN10':    0x4C38, 'IN11':    0x4C3C, 'IN12':    0x4C40, 
+    'IN13':   0x4C44, 'IN14':    0x4C48, 'IN15':    0x4C4C, 'IN16':    0x4C50,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x4C14, 'ST3/4':   0x4C1C, 'ST5/6':   0x4C24, 'ST7/8':   0x4C2C, 
+    'ST9/10': 0x4C34, 'ST11/12': 0x4C3C, 'ST13/14': 0x4C44, 'ST15/16': 0x4C4C,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x4C74,     # ST17/18
+    'ST2':    0x4C7C,
+    'USB':    0x4D04,     # USB 
+    'BT':     0x4D0C,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x4E04, 'FX2':     0x4E08, 'FX3':     0x4E0C, 'FX4':     0x4E10   
+}
+
+def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
+    """
+    Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
+    Fonction utile pour piloter les faders d'envoi des entrées vers les bus
+    """
+    # Exemple : in_send_bus("IN3", "OUT4") doit retourner 0x405F
+    bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
+    
+    if bus_type == 'MAIN':
+        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_MAIN_MAP[in_canonical_name])
+    elif bus_type == 'OUT': 
+        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_OUT_MAP[in_canonical_name])
+    elif bus_type == 'FX': 
+        in_index_14 = convert_14bits_to_hex(CQ_FADER_TO_FX_MAP[in_canonical_name])
+    else:
+        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
+        return 0x0000
+
+    fader_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
+    fader_vcvf_14 = convert_hex_to14bits(fader_vcvf_hex)
+    
+    return fader_vcvf_14
+
+
+# ==============================================================================
+# OUTPUT/BUS FADERS
+# ==============================================================================
+CQ_BUS_FADER_MAP = {
+    'MAIN':   0x4F00,
+    'OUT1':   0x4F01, 'OUT2':   0x4F02, 'OUT3':   0x4F03, 'OUT4':   0x4F04, 'OUT5':   0x4F05, 'OUT6':   0x4F06, 
+    'OUT1/2': 0x4F01, 'OUT3/4': 0x4F03, 'OUT5/6': 0x4F05, 
+    'FX1':    0x4F0D, 'FX2':    0x4F0E, 'FX3':    0x4F0F, 'FX4':    0x4F10, 
+    'DCA1':   0x4F20, 'DCA2':   0x4F21, 'DCA3':   0x4F22, 'DCA4':   0x4F23 
+}
+
+def get_bus_fader_vcvf(bus_canonical_name):
+    """
+    Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
+    Fonction utile pour piloter le niveau des bus (par exemple, la sortie MAIN générale)
+    """
+    return (CQ_BUS_FADER_MAP[bus_canonical_name])
+
+# ==============================================================================
+# PAN TO BUS MAPPING
+# ==============================================================================
+CQ_PAN_TO_MAIN_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x5000, 'IN2':     0x5001, 'IN3':     0x5002, 'IN4':     0x5003, 
+    'IN5':    0x5004, 'IN6':     0x5005, 'IN7':     0x5006, 'IN8':     0x5007, 
+    'IN9':    0x5008, 'IN10':    0x5009, 'IN11':    0x500A, 'IN12':    0x500B, 
+    'IN13':   0x500C, 'IN14':    0x500D, 'IN15':    0x500E, 'IN16':    0x500F,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x5000, 'ST3/4':   0x5002, 'ST5/6':   0x5004, 'ST7/8':   0x5006, 
+    'ST9/10': 0x5008, 'ST11/12': 0x500A, 'ST13/14': 0x500C, 'ST15/16': 0x500E,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x5018,     # ST17/18
+    'ST2':    0x501A,
+    'USB':    0x501C,     # USB 
+    'BT':     0x501E,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x503C, 'FX2':     0x503D, 'FX3':     0x503E, 'FX4':     0x503F   
+}
+
+CQ_PAN_TO_OUT_MAP = {
+    # 16 Canaux Mono (IN1-IN16) 
+    'IN1':    0x5044, 'IN2':     0x5050, 'IN3':     0x505C, 'IN4':     0x5068, 
+    'IN5':    0x5074, 'IN6':     0x5100, 'IN7':     0x510C, 'IN8':     0x5118, 
+    'IN9':    0x5124, 'IN10':    0x5130, 'IN11':    0x513C, 'IN12':    0x5148, 
+    'IN13':   0x5154, 'IN14':    0x5160, 'IN15':    0x516C, 'IN16':    0x5178,
+
+    # Entrées Stéréo Linkées (Le contrôle se fait via l'index du premier canal)
+    'ST1/2':  0x5044, 'ST3/4':   0x505C, 'ST5/6':   0x5074, 'ST7/8':   0x510C, 
+    'ST9/10': 0x5124, 'ST11/12': 0x513C, 'ST13/14': 0x5154, 'ST15/16': 0x516C,
+
+    # Entrées Stéréo Dédiées et Retours Numériques
+    'ST1':    0x5264,     # ST17/18
+    'ST2':    0x527C,
+    'USB':    0x5314,     # USB 
+    'BT':     0x532C,     # Bluetooth
+    
+    # Sorties Bus FX
+    'FX1':    0x5614, 'FX2':     0x5620, 'FX3':     0x562C, 'FX4':     0x5638   
+}
+
+def get_pan_to_bus_vcvf(in_canonical_name, bus_canonical_name):
+    """
+    Retourne un integer sur 2x7 bits utilisé pour les commandes de fader - cf protocole MIDI page 17
+    Fonction utile pour piloter les faders d'envoi des entrées vers les bus
+    """
+    # Exemple : in_send_bus("IN3", "OUT4") doit retourner 0x405F
+    bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
+    
+    if bus_type == 'MAIN':
+        in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_MAIN_MAP[in_canonical_name])
+    elif bus_type == 'OUT': 
+        in_index_14 = convert_14bits_to_hex(CQ_PAN_TO_OUT_MAP[in_canonical_name])
+    else:
+        print(f"/!\ internal ERROR: invalid bus_index for {bus_canonical_name}")
+        return 0x0000
+
+    pan_vcvf_hex = convert_14bits_to_hex(in_index_14) + bus_number - 1
+    pan_vcvf_14 = convert_hex_to14bits(pan_vcvf_hex)
+    
+    return pan_vcvf_14
+
+
+# ==============================================================================
+# FADER VALUES
+# ==============================================================================
+# tables globales : valeurs VCVF recalculées en hexa sur 16 bits pour permettre les calculs d'interpolation
+# Calcul des valeurs VC/VF nécessaire au contrôle des faders de la CQ18T et des PAN
+# Les 2 tables "VAL14" contiennent les valeurs définies dans la doc A&H Protocole MIDI
+# Elles sont codées sous forme de 2 octets de 7 bits (compatibilité MIDI)
+TABLE_VCVF_FADER_VAL14 = [
+    [-89, 0x0140], [-85, 0x0200], [-80, 0x0240], [-75, 0x0300], [-70, 0x0400], [-65, 0x0500], [-60, 0x0600], [-55, 0x0700],
+    [-50, 0x0800], [-45, 0x0C00], [-40, 0x0F40], [-38, 0x1240], [-36, 0x1540], [-35, 0x1700], [-34, 0x1900], [-33, 0x1A00],
+    [-32, 0x1C00], [-31, 0x1D40], [-30, 0x1F00], [-29, 0x2040], [-28, 0x2200], [-27, 0x2340], [-26, 0x2500], [-25, 0x2640],
+    [-24, 0x2840], [-23, 0x2A00], [-22, 0x2B40], [-21, 0x2D00], [-20, 0x2E40], [-19, 0x3000], [-18, 0x3140], [-17, 0x3300],
+    [-16, 0x3440], [-15, 0x3600], [-14, 0x3800], [-13, 0x3940], [-12, 0x3B00], [-11, 0x3C40], [-10, 0x3E00], [-9,  0x4140],
+    [-8,  0x4440], [-7,  0x4800], [-6,  0x4B00], [-5,  0x4E40], [-4,  0x5240], [-3,  0x5640], [-2,  0x5A00], [-1,  0x5E00],
+    [0,   0x6200], [1,   0x6540], [2,   0x6900], [3,   0x6C40], [4,   0x7000], [5,   0x7340], [6,   0x7540], [7,   0x7800],
+    [8,   0x7A40], [9,   0x7D00], [10,  0x7F40]
+]
+
+table_vcvf_fader_hex = []
+
+def get_fader_vcvf(value_db):
+    
+
+# ==============================================================================
+# PAN VALUES
+# ==============================================================================
+
+TABLE_VCVF_PAN_VAL14 = [
+    [-100, 0x0000], [-90, 0x0633], [-80, 0x0C66], [-70, 0x1319], [-60, 0x194C], [-50, 0x1F7F], [-40, 0x2632], [-30, 0x2C65],
+    [-20,  0x3318], [-15, 0x3632], [-10, 0x394B], [-5,  0x3C65], [0,   0x4000], [5,   0x4318], [10,  0x4632], [15,  0x494B],
+    [20,   0x4C65], [30,  0x5318], [40, 0x594B],  [50,  0x5F7F], [60,  0x6632], [60,  0x6632], [70,  0x6C65], [80,  0x7318],
+    [90,   0x764B], [100, 0x7F7F]
+]
+
+table_vcvf_pan_hex = []
+
+# compute_table_val14_to_hex(table_vcvf_fader_hex, TABLE_VCVF_FADER_VAL14)
+# compute_table_val14_to_hex(table_vcvf_pan_hex, TABLE_VCVF_PAN_VAL14)
+
+def hex_to_dec(hex_value):
+    """Convertit une chaîne hexadécimale en entier décimal."""
+    # La fonction int() avec base 16 gère la conversion.
+    # On ajoute le préfixe '0x' si manquant pour plus de robustesse.
+    if not hex_value.startswith('0x') and not hex_value.startswith('0X'):
+        hex_value = '0x' + hex_value
+    return int(hex_value, 16)
+
+def dec_to_hex_16bit(dec_value):
+    """Convertit un entier décimal en chaîne hexadécimale de 16 bits (4 caractères)."""
+    # On s'assure que la valeur reste dans la plage 16 bits (0 à 65535)
+    dec_value = max(0, min(65535, round(dec_value)))
+    # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
+    return f'{dec_value:04X}'
+    
     
     
 # --- Conversion de Commandes Intelligibles vers MIDI ---
