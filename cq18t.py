@@ -1,5 +1,6 @@
 # cq18t.py library
 import re
+import test_utility
 
 CQ_HEXVALUE_ERROR = 0xFFFF  # valeur impossible car les valeurs transmises sur MIDI sont sur 7 bits
 
@@ -595,6 +596,52 @@ def cq_get_midi_tap_tempo(midi_channel, softkey_canonical_name):
 
 
 
+
+# ==============================================================================
+# UNITARY TESTS
+# ==============================================================================
+
+TEST_PLAN: test_utility.TestPlan = [
+    {
+        "chapter_title": "1: Test des fonctions de conversion",
+        "tests": [
+            {
+                "test_title": "Conversion valeur hexa string en valeur entière numérique",
+                "function_under_test": hex_to_dec,
+                "expected_return": 0x1234,
+                "function_arguments": ['0x1234']
+            },
+            {
+                "test_title": "Conversion valeur hexa string en valeur entière numérique",
+                "function_under_test": hex_to_dec,
+                "expected_return": 0x1234,
+                "function_arguments": ['0x1234']
+            },
+        ]
+    },
+    
+    {
+        "chapter_title": "Chapitre 2: Fonctions CQ18T basiques",
+        "tests": [
+            {
+                "test_title": "Récupération ID Softkey",
+                "function_under_test": get_softkey_midicode_by_name,
+                "expected_return": 0x31,
+                "function_arguments": ['Soft Key #2']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'une Softkey qui n'existe pas",
+                "function_under_test": get_softkey_midicode_by_name,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['Soft Key #4']
+            },
+        ]
+    }
+]
+
+def run_unitary_tests():
+    return (test_utility.run_test_plan(TEST_PLAN))
+    
 # ==============================================================================
 # INITIALISATION DU MODULE
 # ==============================================================================
@@ -602,9 +649,5 @@ def cq_get_midi_tap_tempo(midi_channel, softkey_canonical_name):
 if __name__ == '__main__':
     print(f"/!/ ERROR: This module cannot be used in standalone")
     exit(1)
-
-# prépare les tables d'interpolation pour la console CQ18T
-
-
 
 
