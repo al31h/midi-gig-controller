@@ -621,8 +621,7 @@ TEST_PLAN: test_utility.TestPlan = [
     },
     
     {
-        "chapter_title": "Chapitre 2: Fonctions CQ18T basiques",
-        "chapter_title": "Chapitre 2.1: Gestion des Soft Keys",
+        "chapter_title": "Chapitre 2.1: Fonctions CQ18T basiques - Gestion des Soft Keys",
         "tests": [
             {
                 "test_title": "Récupération ID Softkey",
@@ -637,7 +636,9 @@ TEST_PLAN: test_utility.TestPlan = [
                 "function_arguments": ['Soft Key #4']
             },
         ]
-        "chapter_title": "Chapitre 2.2: Gestion des Mutes",
+    },
+    {
+        "chapter_title": "Chapitre 2.2: Fonctions CQ18T basiques - Gestion des Mutes",
         "tests": [
             {
                 "test_title": "Récupération ID Mute",
@@ -658,24 +659,26 @@ TEST_PLAN: test_utility.TestPlan = [
                 "function_arguments": ['IN0']
             },
         ]
-        "chapter_title": "Chapitre 2.3: Gestion des Faders d'envoi vers les bus",
+    },
+    {
+        "chapter_title": "Chapitre 2.3: Fonctions CQ18T basiques - Gestion des Faders d'envoi vers les bus",
         "tests": [
             {
                 "test_title": "Récupération ID Fader to bus Main",
                 "function_under_test": get_fader_to_bus_vcvf,
-                "expected_return": 0x0002,
+                "expected_return": 0x4002,
                 "function_arguments": ['IN3', 'MAIN']
             },
             {
                 "test_title": "Récupération ID Fader to bus Out",
                 "function_under_test": get_fader_to_bus_vcvf,
-                "expected_return": 0x0002,
+                "expected_return": 0x4157,
                 "function_arguments": ['IN13', 'OUT4']
             },
             {
                 "test_title": "Récupération ID Fader to bus FX",
                 "function_under_test": get_fader_to_bus_vcvf,
-                "expected_return": 0x0002,
+                "expected_return": 0x4D05,
                 "function_arguments": ['USB', 'FX2']
             },
             {
@@ -691,12 +694,14 @@ TEST_PLAN: test_utility.TestPlan = [
                 "function_arguments": ['IN3', 'OUT16']
             },
         ]
-        "chapter_title": "Chapitre 2.4: Gestion des Faders de bus",
+    },
+    {
+        "chapter_title": "Chapitre 2.4: Fonctions CQ18T basiques - Gestion des Faders de bus",
         "tests": [
             {
                 "test_title": "Récupération ID Fader de bus",
                 "function_under_test": get_bus_fader_vcvf,
-                "expected_return": 0x0002,
+                "expected_return": 0x4F05,
                 "function_arguments": ['OUT5']
             },
             {
@@ -704,6 +709,146 @@ TEST_PLAN: test_utility.TestPlan = [
                 "function_under_test": get_bus_fader_vcvf,
                 "expected_return": CQ_HEXVALUE_ERROR,
                 "function_arguments": ['FX9']
+            },
+        ]
+    },
+    {
+        "chapter_title": "Chapitre 2.5: Fonctions CQ18T basiques - Gestion des Pan d'envoi vers les bus",
+        "tests": [
+            {
+                "test_title": "Récupération ID Pan to bus Main",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": 0x5002,
+                "function_arguments": ['IN3', 'MAIN']
+            },
+            {
+                "test_title": "Récupération ID Pan to bus Out",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": 0x5157,
+                "function_arguments": ['IN13', 'OUT4']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Pan qui n'existe pas",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['IN0', 'MAIN']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Pan vers un bus qui n'existe pas",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['IN3', 'FX2']
+            },
+        ]
+    },
+    {
+        "chapter_title": "Chapitre 2.6: Fonctions CQ18T basiques - Valeur des faders",
+        "tests": [
+            {
+                "test_title": "Valeur de fader pour mise Off",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0000,
+                "function_arguments": ['-inf']
+            },
+            {
+                "test_title": "Valeur de fader pour mise Off",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0000,
+                "function_arguments": ['off']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur négative précise",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0800,
+                "function_arguments": [-50]
+            },
+            {
+                "test_title": "Valeur de fader pour valeur négative interpolée",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0D80,
+                "function_arguments": [-42]
+            },
+            {
+                "test_title": "Valeur de fader pour valeur 0dB",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x6200,
+                "function_arguments": [0]
+            },
+            {
+                "test_title": "Valeur de fader pour valeur positive interpolée",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x7700,
+                "function_arguments": [6.5]
+            },
+            {
+                "test_title": "Valeur de fader pour valeur hors plage négative",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0140,
+                "function_arguments": [-120]
+            },
+            {
+                "test_title": "Valeur de fader pour valeur hors plage positive",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x7F40,
+                "function_arguments": [+25]
+            },
+        ]
+    },
+    {
+        "chapter_title": "Chapitre 2.6: Fonctions CQ18T basiques - Valeur des pans",
+        "tests": [
+            {
+                "test_title": "Valeur de fader pour mise au center",
+                "function_under_test": get_pan_vcvf ,
+                "expected_return": 0x4000,
+                "function_arguments": ['center']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur négative précise",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x2C65,
+                "function_arguments": ['left 30%']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur négative interpolée",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x1820,
+                "function_arguments": ['left 55%']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur positive interpolée",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x5600,
+                "function_arguments": ['right 35%']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur hors plage négative",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x0000,
+                "function_arguments": ['left 120%']
+            },
+            {
+                "test_title": "Valeur de fader pour valeur hors plage positive",
+                "function_under_test": table_vcvf_fader_hex ,
+                "expected_return": 0x7F7F,
+                "function_arguments": ['right 120%']
+            },
+        ]
+    }
+    {
+        "chapter_title": "Chapitre 3.1: Construction des messages MIDI - Gestion des Soft Keys",
+        "tests": [
+            {
+                "test_title": "Récupération ID Softkey",
+                "function_under_test": get_softkey_midicode_by_name,
+                "expected_return": 0x31,
+                "function_arguments": ['Soft Key #2']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'une Softkey qui n'existe pas",
+                "function_under_test": get_softkey_midicode_by_name,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['Soft Key #4']
             },
         ]
     }
