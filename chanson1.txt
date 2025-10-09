@@ -1,7 +1,7 @@
 [SONG_INFO]
 BPM = 128
 
-[CQ_PRESETS]
+[MIX]
 # Les clés sont le chemin (ex: IN1/fader), les valeurs sont la commande (ex: 0db)
 Chant_Emilie/send/Facade/0
 Chant_Emilie/pan/Facade/left 30%
@@ -15,7 +15,8 @@ Chant_Benjamin/pan/Facade/left 30%
 Chant_Benjamin/send/Reverb_Vocale/-10
 Chant_Olivier/mute/ON
 Chant_Denis/mute/ON
-
+Facade/level/-20
+Reverb_Vocale/send/Facade/-10
 
 [PEDALS]
 # Les clés sont le nom de la pédale (défini dans config.json)

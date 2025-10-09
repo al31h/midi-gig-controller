@@ -1,20 +1,23 @@
 {
+    "songs_directory": "song_sets",
+
     "midi_in_name_part": "USB MIDI Interface",
     "midi_in_channel": 16,
+	
     "midi_out_name_part": "CQ-18T",
 	"cq_midi_channel": 1,
     "midi_out_channel": 1,
-    "songs_directory": "song_sets",
+
+    "cq_tap_tempo_softkey": "Soft Key #2", 
     
     "midronome_channel": 12,
-    "cq_tap_tempo_note": 49, 
     
     "pedals": {
         "Denis_Sim_Amp": 3,      
         "Alain_Sim_Amp": 4,
         "Alain_HXone": 5,
         "Alain_Mfx": 6,
-        "Benjamin_Sim_Amp": 7,
+        "Benjamin_Sim_Amp": 7
     },
     
     "channel_names": {
@@ -43,8 +46,8 @@
         "OUT5": "Retour_Olivier",
         "OUT6": "Retour_General",
         "FX1": "Reverb_Vocale",
-        "FX2": "Spatial_L"
-        "FX2": "Spatial_R"
+        "FX2": "Spatial_L",
+        "FX2": "Spatial_R",
         "FX2": "Doubleur_chant"
     }
 }

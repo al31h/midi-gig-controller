@@ -1,7 +1,5 @@
 # TODO
 # reste à faire
-# - finir le codage des faders, tester
-# - codage des pans
 # - tester le bpm metronome
 # - tester le BPM / tap tempo sur CQ
 # - coder le traitement des pédales d'effets
@@ -25,87 +23,81 @@ except ImportError:
 
 import cq18t
 
+def get_mix_canonical_name(intelliname, name_to_cq_map):
+    
+    if intelliname in name_to_cq_map:
+        canonical_name = get_input_canonical_name([intelliname].upper())
+    else:
+        canonical_name = intelliname.upper()
+        
+    return canonical_name
 
-
-def parse_mix_command(command, name_to_cq_map):
+def parse_mix_command(midi_channel, command, name_to_cq_map):
     """
     Analyse Chant_Emilie/send_main/0db ou USB/send_main/0db et le convertit en messages NRPN.
     """
     try:
         parts = [p.strip() for p in command.split('/', 3)]
-        if len(parts) < 3: raise ValueError("Format de commande CQ invalide. Attendu Nom/Param/Valeur.")
-
-        input_channel_name = parts[0]
-        # 1. Résoudre le nom du canal d'entrée en nom de canal CQ (ex: Piano_Stéréo -> ST9)
-        if input_channel_name in name_to_cq_map:
-            # Récupère le nom CQ canonique à partir du nom utilisateur (ex: ST9)
-            input_canonical_name = cq18t.get_input_canonical_name([input_channel_name].upper())
-            # old function name = name_to_cq_map
-        else:
-            # Le nom est déjà canonique ou non mappé (ex: IN1, IN2...)
-            input_canonical_name = input_channel_name.upper()
-        # 2. Déterminer l'index LSB NRPN à partir du nom canonique
-        if input_canonical_name not in CQ_CHANNEL_MAP:
-             raise ValueError(f"Canal CQ non supporté ou non défini: {input_canonical_name}")
-
-        input_channel_index = CQ_CHANNEL_MAP[input_canonical_name]
+        if len(parts) < 3: raise ValueError("Format de commande CQ invalide. Attendu Channel/Action/Bus/Valeur, ou Bus/Action/Valeur.")
 
         action = parts[1].lower()
-        
-
-        nrpn_lsb = channel_index & 0x7F
-        midi_messages = []
-
-        # ... (Le reste du code reste inchangé, il détermine le MSB et la valeur 14-bit)
         
         if action == 'send':
             # Exemple de commande dans le fichier 'chanson' : Chant_Toto/send/Facade/0
             # On résoud le nom du bus d'envoi (recherche nom canonique)
-            bus_channel_name = parts[2]
-            # 1. Résoudre le nom du canal d'entrée en nom de canal CQ (ex: Piano_Stéréo -> ST9)
-            if bus_channel_name in name_to_cq_map:
-                # Récupère le nom CQ canonique à partir du nom utilisateur (ex: ST9)
-                bus_canonical_name = name_to_cq_map[bus_channel_name].upper()
+            input_channel_name = get_mix_canonical_name(parts[0], name_to_cq_map)
+            bus_channel_name = get_mix_canonical_name(parts[2], name_to_cq_map)
+            value = parts[3].lower()
+            
+            midi_msg = cq18t.cq_get_midi_msg_set_fader_to_bus(midi_channel, input_channel_name, bus_channel_name, value)
+            
+            if midi_msg == []:
+                print(f"/!/ command {command} ignored")
+                desc = ''
             else:
-                # Le nom est déjà canonique ou non mappé (ex: IN1, IN2...)
-                bus_canonical_name = bus_channel_name.upper()
-
-            # resoudre le numéro de canal de mixage (page 17 protocole MIDI)
-            fader_index = get_fader_index(input_canonical_name, bus_canonical_name)
-            
-            # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation table_vcvf_fader_hex
-            if value_str.lower()  == 'off' or value_str.lower()  == '-inf':
-                value_str='-100'
+                desc = f"Fader {input_channel_name} to bus {bus_channel_name} set to {value}dB"
                 
-            vcvf = interpoler_vcvf(table_vcvf_fader_hex, int(value_str))
-            nrpn_msb = vcvf & 0xff00
-            nrpn_lsb = vsvf & 0x00ff
-
-            # TODO
-            midi_messages = nrpn_to_midi_messages(nrpn_msb, nrpn_lsb, value_14bit)
-            desc = f"CQ: {channel_name_or_cq} Fader réglé à {value_str}"            
-            
-            
-            desc = f"CQ: {user_channel_name} Fader réglé à {value_str}"
-
-            print(f"DEBUG: action = {action} / param {param} / value_str = {value_str}")
-        
-
-
         elif action == 'pan':
-            # Exemple de commande dans le fichier 'chanson' : Chant_Toto/pan/left 30%
-            # on convertit la valeur "left 30%" en valeur numérique : left negatif, right positif -> -30
-            # On calcule les valeurs VC/VF  envoyer à la console via la table d'interpolation TABLE_VCVF_PAN_HEX
-            # ... (logique pan)
-            desc = f"CQ: {user_channel_name} Pan réglé à {value_str}"
+            # Exemple de commande dans le fichier 'chanson' : Chant_Toto/pan/Facade/left 30%
+            input_channel_name = get_mix_canonical_name(parts[0], name_to_cq_map)
+            bus_channel_name = get_mix_canonical_name(parts[2], name_to_cq_map)
+            value = parts[3].lower()
+            
+            midi_msg = cq18t.cq_get_midi_msg_set_pan_to_bus(midi_channel, input_channel_name, bus_channel_name, value)
+            
+            if midi_msg == []:
+                print(f"/!/ command {command} ignored")
+                desc = ''
+            else:
+                desc = f"Pan {input_channel_name} to bus {bus_channel_name} set to {value}"
 
         elif param == 'mute':
-            # ... (logique mute)
-            desc = f"CQ: {user_channel_name} Mute réglé à {value_str}"
+            # Exemple de commande dans le fichier 'chanson' : Chant_Toto/mute/ON
+            channel_name = get_mix_canonical_name(parts[0], name_to_cq_map)
+            value = 0
+            if parts[2].lower() == 'on': value = 1
+            
+            midi_msg = cq18t.cq_get_midi_msg_set_mute_channel(midi_channel, channel_name, value)
+            
+            if midi_msg == []:
+                print(f"/!/ command {command} ignored")
+                desc = ''
+            else:
+                desc = f"Mute {channel_name} set to {parts[2].upper()}"
 
-        elif action == 'send':
-            # ... (logique send)
-            desc = f"CQ: {user_channel_name} Send à {bus_name} réglé à {value_str}"
+        elif action == 'level':
+            # Exemple de commande dans le fichier 'chanson' : Facade/level/-6
+            bus_channel_name = get_mix_canonical_name(parts[1], name_to_cq_map)
+            value = parts[2].lower()
+            
+            midi_msg = cq18t.cq_get_midi_msg_set_bus_fader(midi_channel, bus_channel_name, value)
+            
+            if midi_msg == []:
+                print(f"/!/ command {command} ignored")
+                desc = ''
+            else:
+                desc = f"Bus Level {bus_channel_name} set to {value}dB"
+
             
         else:
             raise ValueError(f"Paramètre CQ non supporté: {param}")
@@ -113,8 +105,11 @@ def parse_mix_command(command, name_to_cq_map):
         return midi_messages, desc
 
     except Exception as e:
-        print(f"/!\ Erreur lors de l'analyse de la commande '{command}': {e}")
+        print(f"/!/ Erreur lors de l'analyse de la commande '{command}': {e}")
         return [], ""
+
+
+
 
 # --- Contrôle de Pédales et Autres Périphériques ---
 
@@ -157,7 +152,7 @@ def load_config(file_path):
             config['pedals'] = {name: int(ch) for name, ch in pedals.items()}
             return config
     except Exception as e:
-        print(f"/!\ Erreur de lecture/parsing du fichier de configuration général '{file_path}': {e}")
+        print(f"/!/ Erreur de lecture/parsing du fichier de configuration général '{file_path}': {e}")
         sys.exit(1)
 
 def load_mapping(file_path):
@@ -168,7 +163,7 @@ def load_mapping(file_path):
             mapping = {int(k): v for k, v in json.load(f).items()}
             return mapping
     except Exception as e:
-        print(f"/!\ Erreur de lecture/parsing du fichier de mappage PC '{file_path}': {e}")
+        print(f"/!/ Erreur de lecture/parsing du fichier de mappage PC '{file_path}': {e}")
         sys.exit(1)
 
 def load_song_file(song_filename, songs_dir):
@@ -205,7 +200,7 @@ def load_song_file(song_filename, songs_dir):
         return data
         
     except Exception as e:
-        print(f"/!\ Erreur lors du chargement/parsing du fichier de chanson '{filepath}': {e}")
+        print(f"/!/ Erreur lors du chargement/parsing du fichier de chanson '{filepath}': {e}")
         return None
 
 
@@ -213,9 +208,10 @@ def load_song_file(song_filename, songs_dir):
 
 class MidiShowController:
     
-    def __init__(self, config_file, mapping_file, verbose):
+    def __init__(self, config_file, mapping_file, test, verbose):
         self.config = load_config(config_file)
         self.pc_map = load_mapping(mapping_file)
+        self.test = test
         self.verbose = verbose
         self.songs_dir = self.config.get("songs_directory", "song_sets")
         
@@ -227,7 +223,7 @@ class MidiShowController:
         self.input_channel = self.config.get('midi_in_channel', 1)
         self.cq_midi_channel = self.config.get('cq_midi_channel', 1)
         self.midronome_channel = self.config.get('midronome_channel', 16)
-        self.cq_tap_tempo_note = self.config.get('cq_tap_tempo_note', 48)
+        self.cq_tap_tempo_softkey = self.config.get('cq_tap_tempo_softkey', '')
         self.pedal_map = self.config.get('pedals', {})
 
         # NOUVEAU: Mappage Nom_Utilisateur -> Canal_CQ (ex: Chant_Emilie -> IN1)
@@ -254,7 +250,7 @@ class MidiShowController:
             )
             print(f"- Port de sortie (pour CQ/Pédales) ouvert: {out_name}")
         except Exception as e:
-            print(f"/!\ Erreur d'ouverture du port de sortie MIDI ({self.output_name}): {e}")
+            print(f"/!/ Erreur d'ouverture du port de sortie MIDI ({self.output_name}): {e}")
             sys.exit(1)
 
         # Port d'Entrée
@@ -266,7 +262,7 @@ class MidiShowController:
             # self.midi_in.ignore_types(timing=False)    # autorise la réception de la MIDI Clock
             self.midi_in.set_callback(self.midi_callback)
         except Exception as e:
-            print(f"/!\ Erreur d'ouverture du port d'entrée MIDI ({self.input_name}): {e}")
+            print(f"/!/ Erreur d'ouverture du port d'entrée MIDI ({self.input_name}): {e}")
             self.midi_out.close()
             sys.exit(1)
 
@@ -294,38 +290,35 @@ class MidiShowController:
                 
                 print(f"[{time.strftime('%H:%M:%S')}] CH {channel:<2} | {msg_desc:<15} | {description}")
 
-            self.midi_out.send_message(msg)
+            if self.test == False:
+                self.midi_out.send_message(msg)
 
     def send_tap_tempo(self, bpm):
         """Simule le Tap Tempo sur le CQ-18T en envoyant 20 SoftKey Note On/Off."""
+        
         if bpm <= 0: return
+
+        channel = self.cq_midi_channel - 1 
+        tap_tempo_softkey = self.cq_tap_tempo_softkey 
+
+        midi_msg = cq18t.cq_get_midi_tap_tempo(self.cq_midi_channel, tap_tempo_softkey)
+        if midi_msg == []:
+            return
+            
 
         # Intervalle entre les taps (en secondes)
         # Tap Tempo = 60 / BPM
         interval = 60.0 / bpm
         
-        # La documentation A&H indique que les Soft Keys sont contrôlées par Note On/Off
-        note = self.cq_tap_tempo_note 
-        channel = self.cq_midi_channel - 1 
 
         print(f"= Envoi du Tap Tempo ({bpm} BPM) au CQ-18T (Note {note}, 20 frappes)...")
 
         for i in range(20): # 20 frappes pour une bonne précision
-            # Note ON (Soft Key Press)
-            note_on = [rtmidi.MidiMessage.NOTE_ON | channel, note, 127]
-            # Note OFF (Soft Key Release)
-            note_off = [rtmidi.MidiMessage.NOTE_OFF | channel, note, 0]
-            
-            self.send_midi([note_on], f"CQ Tap Tempo (Note ON) - Hit {i+1}")
-            
-            # Temps de relâchement très court
-            time.sleep(0.01) 
-            
-            self.send_midi([note_off], f"CQ Tap Tempo (Note OFF) - Hit {i+1}")
+            self.send_midi(midi_msg)
             
             # Attendre l'intervalle du tempo
             if i < 19:
-                time.sleep(interval - 0.01) # interval - temps de frappe
+                time.sleep(interval) 
 
         print("Tap Tempo terminé.")
 
@@ -334,11 +327,12 @@ class MidiShowController:
         # Le midronome se pilote en tempo par une commande CC : 0xB<channel-1> 0x57 <BPM-60>
         # Donc,par exemple, midronome sur canal 12, et BPM 165 : BB 57 69
         
-        channel = self.midronome_channel - 1 
-        midro_bpm = [rtmidi.MidiMessage.CC | channel, 0x57, (bpm-60)]
-        self.send_midi([midro_bpm], f"Midronome BPM (CC) {bpm}")
+        if bpm <= 0: return
         
-        # Pour un contrôle standard, on enverrait un Start/Stop et des messages MIDI Clock.
+        channel = self.midronome_channel - 1 
+        midi_msg = [rtmidi.MidiMessage.CC | channel, 0x57, (bpm-60)]
+        self.send_midi([midi_msg], f"Midronome BPM (CC) {bpm}")
+        
         pass
 
     def execute_commands(self, song_data):
@@ -353,7 +347,7 @@ class MidiShowController:
 
         # 2. Commandes CQ-18T (NRPN)
         print("\n--- Exécution des Commandes CQ-18T ---")
-        for command in song_data['CQ_COMMANDS']:
+        for command in song_data['MIX']:
             try:
                 if '=' in command:
                     key, value = command.split('=', 1)
@@ -362,11 +356,11 @@ class MidiShowController:
                     intelligible_command = command
             
                 # NOUVEAU: Appel avec le mappage de noms
-                messages, desc = parse_cq_command(intelligible_command, self.name_to_cq_map)
+                messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
                 self.send_midi(messages, desc)
         
-    except Exception as e:
-        print(f"/!\ Commande CQ non exécutée: {e}")
+            except Exception as e:
+                print(f"/!/ Commande CQ non exécutée: {e}")
 
         # 3. Commandes Pédales d'Effets (PC/CC)
         print("\n--- Exécution des Commandes Pédales d'Effets ---")
@@ -380,7 +374,7 @@ class MidiShowController:
                 messages, desc = parse_pedal_command(pedal_name, command, self.pedal_map)
                 self.send_midi(messages, desc)
             except Exception as e:
-                print(f"/!\ Commande Pédale non exécutée: {e}")
+                print(f"/!/ Commande Pédale non exécutée: {e}")
         
         print("\n--- Exécution du set de commandes terminée ---")
 
@@ -389,7 +383,7 @@ class MidiShowController:
         """Charge et exécute le set de commandes pour le numéro PC reçu."""
         
         if pc_number not in self.pc_map:
-            print(f"/!\ PC {pc_number} non mappé à une chanson. Ignoré.")
+            print(f"/!/ PC {pc_number} non mappé à une chanson. Ignoré.")
             return
 
         song_filename = self.pc_map[pc_number]
@@ -406,6 +400,9 @@ class MidiShowController:
         
         message_type = midi_data[0] & 0xF0
         channel_received = (midi_data[0] & 0x0F) + 1 # 1-16
+        
+        if verbose:
+            print(f"[{time.strftime('%H:%M:%S')}] Received MIDI command {midi_data}")
         
         # Vérifie si c'est un Program Change sur le canal d'entrée spécifié
         if (message_type == rtmidi.MidiMessage.PROGRAM_CHANGE and
@@ -438,24 +435,20 @@ def list_midi_ports():
 
 
 def main():
-    
-
-
 
     parser = ArgumentParser(description="Contrôleur de show MIDI pour Allen & Heath CQ-18T et effets externes.")
     
-    # NOUVEAU: Option pour lister les ports
     parser.add_argument('--list-ports', '-l', action='store_true', 
                         help="Affiche la liste des ports MIDI disponibles et quitte.")
-    
-    # Les arguments existants sont rendus optionnels pour ne pas les exiger lors du listage des ports
     parser.add_argument('config_file', nargs='?', default='config.json', 
                         help="Chemin vers le fichier de configuration général (JSON).")
     parser.add_argument('mapping_file', nargs='?', default='pc_mapping.json',
                         help="Chemin vers le fichier de mappage PC -> Chanson (JSON).")
     parser.add_argument('--verbose', '-v', action='store_true', help="Affiche toutes les commandes MIDI envoyées.")
+    parser.add_argument('--test', '-t', action='store_true', help="N'envoie pas les commandes MIDI, ne fait que les afficher.")
     
     args = parser.parse_args()
+    print([args])
 
     # Logique pour le listage des ports
     if args.list_ports:
@@ -469,12 +462,15 @@ def main():
         return
 
     try:
-        controller = MidiShowController(args.config_file, args.mapping_file, args.verbose)
+        controller = MidiShowController(args.config_file, args.mapping_file, args.test, args.verbose)
     except SystemExit:
         # Une erreur fatale (config/mapping non trouvé) s'est produite lors de l'init.
         return
 
-    print(f"Démarrage du contrôleur (Mode Verbeux: {args.verbose}).")
+    if args.test:
+        print(f"Démarrage du contrôleur en mode Test. Aucune commande MIDI ne sera envoyée.")
+    else:
+        print(f"Démarrage du contrôleur (Mode Verbeux: {args.verbose}).")
     print(f"Écoute des commandes MIDI PC sur l'interface '{controller.input_name}', canal {controller.input_channel}...")
     print("Appuyez sur Ctrl+C pour arrêter.")
     
@@ -490,5 +486,4 @@ def main():
 
 
 if __name__ == '__main__':
-
     main()

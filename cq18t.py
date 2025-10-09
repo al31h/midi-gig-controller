@@ -185,7 +185,7 @@ CQ_MUTE_CHANNELS_MAP = {
     'OUT1/2': 0x0045, 'OUT3/4':  0x0047, 'OUT5/6':  0x0049,
     
     # MIX GROUPS
-    'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP3':  0x0403, 
+    'MGRP1':  0x0400, 'MGRP2':   0x0401, 'MGRP3':   0x0402, 'MGRP4':   0x0403, 
     
     # DCA
     'DCA1':   0x0200, 'DCA2':    0x0201, 'DCA3':    0x0202, 'DCA4':    0x0203
@@ -198,6 +198,8 @@ def get_channel_mute_vcvf(channel_canonical_name):
     """
     try:
         ch_index_hex = CQ_MUTE_CHANNELS_MAP[channel_canonical_name]
+        ch_index_14 = convert_14bits_to_hex(ch_index_hex)
+        print(f"channel_canonical_name = {channel_canonical_name} == ch_index_hex = {ch_index_hex}")
     except:
         return CQ_HEXVALUE_ERROR
         
@@ -284,13 +286,13 @@ def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
         except:
             return CQ_HEXVALUE_ERROR
 
-    elif bus_type == 'OUT': 
+    elif bus_type == 'OUT' and bus_number >= 1 and bus_number <= 6: 
         try:
             in_index_14 = CQ_FADER_TO_OUT_MAP[in_canonical_name]
         except:
             return CQ_HEXVALUE_ERROR
             
-    elif bus_type == 'FX': 
+    elif bus_type == 'FX' and bus_number >= 1 and bus_number <= 4: 
         try:
             in_index_14 = CQ_FADER_TO_FX_MAP[in_canonical_name]
         except:
@@ -390,7 +392,7 @@ def get_pan_to_bus_vcvf(in_canonical_name, bus_canonical_name):
         except:
             return CQ_HEXVALUE_ERROR
             
-    elif bus_type == 'OUT': 
+    elif bus_type == 'OUT' and bus_number >= 1 and bus_number <= 6 : 
         try:
             in_index_14 = CQ_PAN_TO_OUT_MAP[in_canonical_name]
         except:
@@ -717,25 +719,25 @@ TEST_PLAN: test_utility.TestPlan = [
         "tests": [
             {
                 "test_title": "Récupération ID Pan to bus Main",
-                "function_under_test": get_bus_fader_vcvf,
+                "function_under_test": get_pan_to_bus_vcvf,
                 "expected_return": 0x5002,
                 "function_arguments": ['IN3', 'MAIN']
             },
             {
                 "test_title": "Récupération ID Pan to bus Out",
-                "function_under_test": get_bus_fader_vcvf,
+                "function_under_test": get_pan_to_bus_vcvf,
                 "expected_return": 0x5157,
                 "function_arguments": ['IN13', 'OUT4']
             },
             {
                 "test_title": "Récupération ID d'erreur d'un Pan qui n'existe pas",
-                "function_under_test": get_bus_fader_vcvf,
+                "function_under_test": get_pan_to_bus_vcvf,
                 "expected_return": CQ_HEXVALUE_ERROR,
                 "function_arguments": ['IN0', 'MAIN']
             },
             {
                 "test_title": "Récupération ID d'erreur d'un Pan vers un bus qui n'existe pas",
-                "function_under_test": get_bus_fader_vcvf,
+                "function_under_test": get_pan_to_bus_vcvf,
                 "expected_return": CQ_HEXVALUE_ERROR,
                 "function_arguments": ['IN3', 'FX2']
             },
@@ -746,56 +748,56 @@ TEST_PLAN: test_utility.TestPlan = [
         "tests": [
             {
                 "test_title": "Valeur de fader pour mise Off",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x0000,
                 "function_arguments": ['-inf']
             },
             {
                 "test_title": "Valeur de fader pour mise Off",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x0000,
                 "function_arguments": ['off']
             },
             {
                 "test_title": "Valeur de fader pour valeur négative précise",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x0800,
                 "function_arguments": [-50]
             },
             {
                 "test_title": "Valeur de fader pour valeur négative interpolée",
-                "function_under_test": table_vcvf_fader_hex ,
-                "expected_return": 0x0D80,
+                "function_under_test": get_fader_vcvf ,
+                "expected_return": 0x0E0D,
                 "function_arguments": [-42]
             },
             {
                 "test_title": "Valeur de fader pour valeur 0dB",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x6200,
                 "function_arguments": [0]
             },
             {
                 "test_title": "Valeur de fader pour valeur positive interpolée",
-                "function_under_test": table_vcvf_fader_hex ,
-                "expected_return": 0x7700,
+                "function_under_test": get_fader_vcvf ,
+                "expected_return": 0x7660,
                 "function_arguments": [6.5]
             },
             {
                 "test_title": "Valeur de fader pour valeur hors plage négative",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x0140,
                 "function_arguments": [-120]
             },
             {
                 "test_title": "Valeur de fader pour valeur hors plage positive",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_fader_vcvf ,
                 "expected_return": 0x7F40,
                 "function_arguments": [+25]
             },
         ]
     },
     {
-        "chapter_title": "Chapitre 2.6: Fonctions CQ18T basiques - Valeur des pans",
+        "chapter_title": "Chapitre 2.7: Fonctions CQ18T basiques - Valeur des pans",
         "tests": [
             {
                 "test_title": "Valeur de fader pour mise au center",
@@ -805,54 +807,82 @@ TEST_PLAN: test_utility.TestPlan = [
             },
             {
                 "test_title": "Valeur de fader pour valeur négative précise",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_pan_vcvf ,
                 "expected_return": 0x2C65,
                 "function_arguments": ['left 30%']
             },
             {
                 "test_title": "Valeur de fader pour valeur négative interpolée",
-                "function_under_test": table_vcvf_fader_hex ,
-                "expected_return": 0x1820,
+                "function_under_test": get_pan_vcvf ,
+                "expected_return": 0x1C66,
                 "function_arguments": ['left 55%']
             },
             {
                 "test_title": "Valeur de fader pour valeur positive interpolée",
-                "function_under_test": table_vcvf_fader_hex ,
-                "expected_return": 0x5600,
+                "function_under_test": get_pan_vcvf ,
+                "expected_return": 0x5632,
                 "function_arguments": ['right 35%']
             },
             {
                 "test_title": "Valeur de fader pour valeur hors plage négative",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_pan_vcvf ,
                 "expected_return": 0x0000,
                 "function_arguments": ['left 120%']
             },
             {
                 "test_title": "Valeur de fader pour valeur hors plage positive",
-                "function_under_test": table_vcvf_fader_hex ,
+                "function_under_test": get_pan_vcvf ,
                 "expected_return": 0x7F7F,
                 "function_arguments": ['right 120%']
             },
         ]
-    }
+    },
+
     {
-        "chapter_title": "Chapitre 3.1: Construction des messages MIDI - Gestion des Soft Keys",
+        "chapter_title": "Chapitre 3.1: Construction des messages MIDI - Gestion des Scènes",
         "tests": [
             {
-                "test_title": "Récupération ID Softkey",
-                "function_under_test": get_softkey_midicode_by_name,
-                "expected_return": 0x31,
-                "function_arguments": ['Soft Key #2']
-            },
-            {
-                "test_title": "Récupération ID d'erreur d'une Softkey qui n'existe pas",
-                "function_under_test": get_softkey_midicode_by_name,
-                "expected_return": CQ_HEXVALUE_ERROR,
-                "function_arguments": ['Soft Key #4']
+                "test_title": "Message MIDI de sélection de scène",
+                "function_under_test": cq_get_midi_msg_set_scene,
+                "expected_return": [0xB0, 0x00, 0x00, 0xC0, 0x0B],
+                "function_arguments": [1, 12]
             },
         ]
-    }
+    },
+    {
+        "chapter_title": "Chapitre 3.2: Construction des messages MIDI - Gestion des Soft Keys",
+        "tests": [
+            {
+                "test_title": "Message MIDI d'activation de Soft Key",
+                "function_under_test": cq_get_midi_msg_press_softkey,
+                "expected_return": [0x90, 0x31, 0x7F, 0x80, 0x31, 0x00],
+                "function_arguments": [1, 'Soft Key #2']
+            },
+            {
+                "test_title": "Message MIDI d'activation de Soft Key qui n'existe pas",
+                "function_under_test": cq_get_midi_msg_press_softkey,
+                "expected_return": [],
+                "function_arguments": [1, 'Soft Key #4']
+            },
+        ]
+    },
+#    {
+#        "chapter_title": "Chapitre 3.3: Construction des messages MIDI - Mute",
+#    },
+    {
+        "chapter_title": "Chapitre 3.4: Construction des messages MIDI - Faders to Bus",
+        "tests": [
+            {
+                "test_title": "Fader IN3 à -6dB to Bus Main",
+                "function_under_test": cq_get_midi_msg_set_fader_to_bus,
+                "expected_return": [0xB0, 0x63, 0x40, 0xB0, 0x62, 0x02, 0xB0, 0x06, 0x4B, 0xB0, 0x26, 0x00],
+                "function_arguments": [1, 'IN3', 'MAIN', -6]
+            },
+        ]
+    },
+
 ]
+
 def run_unitary_tests():
     return (test_utility.run_test_plan(TEST_PLAN))
 
