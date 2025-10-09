@@ -11,7 +11,7 @@ Chant_Alain/send/Facade/-5
 Chant_Alain/pan/Facade/left 30%
 Chant_Alain/send/Reverb_Vocale/-10
 Chant_Benjamin/send/Facade/-5
-Chant_Benjamin/pan/Facade/left 30%
+Chant_Benjamin/pan/Facade=left 30%
 Chant_Benjamin/send/Reverb_Vocale/-10
 Chant_Olivier/mute/ON
 Chant_Denis/mute/ON
