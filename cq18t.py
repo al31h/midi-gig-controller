@@ -622,6 +622,7 @@ TEST_PLAN: test_utility.TestPlan = [
     
     {
         "chapter_title": "Chapitre 2: Fonctions CQ18T basiques",
+        "chapter_title": "Chapitre 2.1: Gestion des Soft Keys",
         "tests": [
             {
                 "test_title": "Récupération ID Softkey",
@@ -636,12 +637,80 @@ TEST_PLAN: test_utility.TestPlan = [
                 "function_arguments": ['Soft Key #4']
             },
         ]
+        "chapter_title": "Chapitre 2.2: Gestion des Mutes",
+        "tests": [
+            {
+                "test_title": "Récupération ID Mute",
+                "function_under_test": get_channel_mute_vcvf,
+                "expected_return": 0x0002,
+                "function_arguments": ['IN3']
+            },
+            {
+                "test_title": "Récupération ID Mute avec MSB",
+                "function_under_test": get_channel_mute_vcvf,
+                "expected_return": 0x0402,
+                "function_arguments": ['MGRP3']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Mute qui n'existe pas",
+                "function_under_test": get_channel_mute_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['IN0']
+            },
+        ]
+        "chapter_title": "Chapitre 2.3: Gestion des Faders d'envoi vers les bus",
+        "tests": [
+            {
+                "test_title": "Récupération ID Fader to bus Main",
+                "function_under_test": get_fader_to_bus_vcvf,
+                "expected_return": 0x0002,
+                "function_arguments": ['IN3', 'MAIN']
+            },
+            {
+                "test_title": "Récupération ID Fader to bus Out",
+                "function_under_test": get_fader_to_bus_vcvf,
+                "expected_return": 0x0002,
+                "function_arguments": ['IN13', 'OUT4']
+            },
+            {
+                "test_title": "Récupération ID Fader to bus FX",
+                "function_under_test": get_fader_to_bus_vcvf,
+                "expected_return": 0x0002,
+                "function_arguments": ['USB', 'FX2']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Fader qui n'existe pas",
+                "function_under_test": get_fader_to_bus_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['IN0', 'MAIN']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Fader vers un bus qui n'existe pas",
+                "function_under_test": get_fader_to_bus_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['IN3', 'OUT16']
+            },
+        ]
+        "chapter_title": "Chapitre 2.4: Gestion des Faders de bus",
+        "tests": [
+            {
+                "test_title": "Récupération ID Fader de bus",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": 0x0002,
+                "function_arguments": ['OUT5']
+            },
+            {
+                "test_title": "Récupération ID d'erreur d'un Fader de bus qui n'existe pas",
+                "function_under_test": get_bus_fader_vcvf,
+                "expected_return": CQ_HEXVALUE_ERROR,
+                "function_arguments": ['FX9']
+            },
+        ]
     }
 ]
-
 def run_unitary_tests():
     return (test_utility.run_test_plan(TEST_PLAN))
-    
+
 # ==============================================================================
 # INITIALISATION DU MODULE
 # ==============================================================================
