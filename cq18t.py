@@ -277,6 +277,9 @@ def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     Fonction utile pour piloter les faders d'envoi des entrées vers les bus
     """
     # Exemple : in_send_bus("IN3", "OUT4") doit retourner 0x405F
+    
+#    print(f"DEBUG get_fader_to_bus_vcvf: in_canonical_name = {in_canonical_name} - bus_canonical_name = {bus_canonical_name}")
+    
     bus_type, bus_number = extraire_chaine_et_nombre(bus_canonical_name)
     
     if bus_type == 'MAIN':
@@ -305,6 +308,8 @@ def get_fader_to_bus_vcvf(in_canonical_name, bus_canonical_name):
     in_index_hex = convert_14bits_to_hex(in_index_14)
     fader_vcvf_hex = in_index_hex + bus_number - 1
     fader_vcvf_14 = convert_hex_to_14bits(fader_vcvf_hex)
+
+#    print(f"DEBUG get_fader_to_bus_vcvf: fader_vcvf_14 = {hex(fader_vcvf_14)}")
     
     return fader_vcvf_14
 
@@ -524,6 +529,9 @@ def cq_get_midi_msg_set_fader_to_bus(midi_channel, in_canonical_name, bus_canoni
             0xB0 | channel, 0x06, value_msb, 
             0xB0 | channel, 0x26, value_lsb
           ]
+          
+#    print(f"DEBUG cq_get_midi_msg_set_fader_to_bus: msg = {msg}")
+    
     return msg
     
 def cq_get_midi_msg_set_pan_to_bus(midi_channel, in_canonical_name, bus_canonical_name, pan):

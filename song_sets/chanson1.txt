@@ -1,0 +1,24 @@
+[SONG_INFO]
+#BPM = 128
+
+[MIX]
+Chant_Emilie/send/Facade = 0
+Chant_Emilie/pan/Facade = left 30
+Chant_Emilie/send/Retour_Emilie = 0
+Chant_Emilie/send/Reverb_Vocale = -10
+Chant_Alain/send/Facade = -5
+Chant_Alain/pan/Facade = left 30
+Chant_Alain/send/Reverb_Vocale = -10
+Chant_Benjamin/send/Facade = -5
+Chant_Benjamin/pan/Facade = left 30
+Chant_Benjamin/send/Reverb_Vocale = -10
+Chant_Olivier/mute = ON
+Chant_Denis/mute = ON
+Facade/level = -20
+Reverb_Vocale/send/Facade = -10
+
+[PEDALS]
+# Les clés sont le nom de la pédale (défini dans config.json)
+# Les valeurs sont la commande MIDI PC/CC
+#Delay_M = PC/5
+#Reverb_A = CC/20/127
