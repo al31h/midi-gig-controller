@@ -4,7 +4,7 @@
     "midi_in_name_part": "LoopBe",
     "midi_in_channel": 16,
 	
-    "midi_out_name_part": "loopMidi",
+    "midi_out_name_part": "CQ18",
 	"cq_midi_channel": 1,
     "midi_out_channel": 1,
 

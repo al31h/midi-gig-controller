@@ -21,6 +21,7 @@ except ImportError:
     print("La bibliothèque 'python-rtmidi' est requise. Veuillez l'installer: pip install python-rtmidi")
     sys.exit(1)
 
+import utilities
 import cq18t
 
 def get_port_by_name(midiio, name_part):
@@ -53,22 +54,22 @@ def parse_mix_command(midi_channel, command, name_to_cq_map):
         if action == 'send':
             # Exemple de commande dans le fichier 'chanson' : Chant_Toto/send/Facade/0
             # On résoud le nom du bus d'envoi (recherche nom canonique)
-            print(f"DEBUG parse_mix_command: parts[0] = {parts[0]} - parts[2] = {parts[2]} - parts[3] = {parts[3]}")
+            # print(f"DEBUG parse_mix_command: parts[0] = {parts[0]} - parts[2] = {parts[2]} - parts[3] = {parts[3]}")
             input_channel_name = get_mix_canonical_name(parts[0].upper(), name_to_cq_map)
             bus_channel_name = get_mix_canonical_name(parts[2].upper(), name_to_cq_map)
             value = parts[3].lower()
             
-            print(f"DEBUG parse_mix_command: input_channel_name = {input_channel_name} - bus_channel_name = {bus_channel_name} - value = {value}")
+            # print(f"DEBUG parse_mix_command: input_channel_name = {input_channel_name} - bus_channel_name = {bus_channel_name} - value = {value}")
             
             midi_msg = cq18t.cq_get_midi_msg_set_fader_to_bus(midi_channel, input_channel_name, bus_channel_name, value)
                             
-            print(f"DEBUG parse_mix_command: midi_msg = {midi_msg}")
+            # print(f"DEBUG parse_mix_command: midi_msg = {midi_msg}")
             if midi_msg == []:
                 print(f"/!/ command {command} ignored")
                 desc = ''
             else:
                 desc = f"Fader {input_channel_name} to bus {bus_channel_name} set to {value}dB"
-            print(f"DEBUG parse_mix_command: desc = {desc}")
+            # print(f"DEBUG parse_mix_command: desc = {desc}")
             
                 
         elif action == 'pan':
@@ -76,6 +77,10 @@ def parse_mix_command(midi_channel, command, name_to_cq_map):
             input_channel_name = get_mix_canonical_name(parts[0].upper(), name_to_cq_map)
             bus_channel_name = get_mix_canonical_name(parts[2].upper(), name_to_cq_map)
             value = parts[3].lower()
+            if '%' in value:
+                pass
+            else:
+                value += '%'
             
             midi_msg = cq18t.cq_get_midi_msg_set_pan_to_bus(midi_channel, input_channel_name, bus_channel_name, value)
             
@@ -294,27 +299,39 @@ class MidiShowController:
 
     def send_midi(self, midi_messages, description):
         """Envoie un ou plusieurs messages MIDI et affiche si verbeux."""
+        
         for msg in midi_messages:
-            if self.verbose:
-                # Formatage de l'affichage: Time, Canal, Type de message, Description
-                msg_type = (msg[0] & 0xF0)
-                channel = (msg[0] & 0x0F) + 1
-                
-                if msg_type == 0xC0:
-                    msg_desc = f"PC {msg[1]}"
-                elif msg_type == 0xB0 and msg[1] in [99, 98, 6, 38]:
-                    msg_desc = f"NRPN: CC{msg[1]}={msg[2]}"
-                elif msg_type == 0xB0:
-                    msg_desc = f"CC{msg[1]}={msg[2]}"
-                else:
-                    msg_desc = f"Raw: {msg}"
-                
-                print(f"[{time.strftime('%H:%M:%S')}] CH {channel:<2} | {msg_desc:<15} | {description}")
+            
+            midi_chunks = utilities.split_list_into_chunks(msg)
+            for chunk in midi_chunks:
+        
+                if self.verbose:
+                    # Formatage de l'affichage: Time, Canal, Type de message, Description
+                    msg_type = (chunk[0] & 0xF0)
+                    channel = (chunk[0] & 0x0F) + 1
+                    
+                    if msg_type == 0xC0:
+                        msg_desc = f"PC {chunk[1]}"
+                    elif msg_type == 0x80:
+                        msg_desc = f"Note Off {hex(chunk[1])} {hex(chunk[2])} "
+                    elif msg_type == 0x90:
+                        msg_desc = f"Note On {hex(chunk[1])} {hex(chunk[2])} "
+                    elif msg_type == 0xB0 and chunk[1] in [0x60, 0x61, 0x62, 0x63, 0x06, 0x26]:
+                        msg_desc = f"NRPN: {hex(msg_type)} {hex(chunk[1])} {hex(chunk[2])}"
+                    elif msg_type == 0xB0:
+                        msg_desc = f"CC{chunk[1]}={chunk[2]}"
+                    else:
+                        msg_desc = f"Raw: {chunk}"
+                    
+                    print(f"[{time.strftime('%H:%M:%S')}] CH {channel:<2} | {msg_desc:<20} | {description}")
 
-            if self.test == False:
-                self.midi_out.send_message(msg)
                 
-            pass
+                if self.test == False:
+                    try:
+                        self.midi_out.send_message(chunk)
+                    except Exception as e:
+                        print(f"/!/ Erreur d'envoi du message MIDI ({chunk}): {e}")               
+                
 
     def send_tap_tempo(self, bpm):
         
@@ -365,13 +382,6 @@ class MidiShowController:
     def execute_commands(self, song_data):
         """Exécute toutes les commandes pour la chanson chargée."""
         
-        # 1. Gestion du BPM (Metronome et Tap Tempo CQ)
-        bpm = song_data['BPM']
-        if bpm is not None:
-            print(f"BPM de la chanson: {bpm}")
-            self.set_midronome_bpm(bpm)
-            self.send_tap_tempo(bpm)
-
         # 2. Commandes CQ-18T (NRPN)
         print("\n--- Exécution des Commandes CQ-18T ---")
         print(self.name_to_cq_map)
@@ -387,7 +397,7 @@ class MidiShowController:
         
             # NOUVEAU: Appel avec le mappage de noms
             messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
-            print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
+            # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
             
             self.send_midi([messages], desc)
         
@@ -409,6 +419,13 @@ class MidiShowController:
                 print(f"/!/ Commande Pédale non exécutée: {e}")
         
         print("\n--- Exécution du set de commandes terminée ---")
+
+        # 1. Gestion du BPM (Metronome et Tap Tempo CQ)
+        bpm = song_data['BPM']
+        if bpm is not None:
+            print(f"BPM de la chanson: {bpm}")
+            self.set_midronome_bpm(bpm)
+            self.send_tap_tempo(bpm)
 
 
     def execute_pc_commands(self, pc_number):
@@ -482,10 +499,18 @@ def main():
                         help="Chemin vers le fichier de mappage PC -> Chanson (JSON).")
     parser.add_argument('--verbose', '-v', action='store_true', help="Affiche toutes les commandes MIDI envoyées.")
     parser.add_argument('--test', '-t', action='store_true', help="N'envoie pas les commandes MIDI, ne fait que les afficher.")
+    parser.add_argument('--autotest', '-a', action='store_true', help="Effectue un autotest interne du logiciel.")
+    
     
     args = parser.parse_args()
     print([args])
 
+    # Autotest
+    if args.autotest:
+        utilities.run_unitary_tests()
+        cq18t.run_unitary_tests()
+        return
+        
     # Logique pour le listage des ports
     if args.list_ports:
         list_midi_ports()
