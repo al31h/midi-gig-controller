@@ -1,0 +1,5 @@
+# Stop metronome contrôlé par Ableton
+[MIX]
+CLICK/Mute = ON
+CLICK/send/MAIN = -inf
+BASSE_DENIS/Mute = OFF
