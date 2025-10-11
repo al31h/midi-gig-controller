@@ -18,6 +18,42 @@ def dec_to_hex_16bit(dec_value):
     dec_value = max(0, min(65535, round(dec_value)))
     # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
     return f'{dec_value:04X}'
+
+def declist_to_hexlist(dec_list):
+  """
+  Convertit une liste de valeurs (entiers) en une liste de chaînes 
+  hexadécimales, où chaque résultat:
+  1. Commence par '0x'.
+  2. La partie après '0x' a une longueur paire (alignée sur l'octet).
+
+  Args:
+    liste_valeurs (list): La liste des entiers à convertir.
+
+  Returns:
+    list: Une nouvelle liste de chaînes hexadécimales formatées.
+  """
+  liste_hex_alignee = []
+  
+  for valeur in dec_list:
+    # 1. Obtenir la partie hexadécimale sans le préfixe '0x'
+    hex_sans_prefixe = hex(valeur)[2:].upper()
+    
+    # 2. Vérifier si la longueur est impaire (modulo 2 non nul)
+    if len(hex_sans_prefixe) % 2 != 0:
+      # Si elle est impaire, ajouter un '0' en tête pour la rendre paire
+      # Par exemple: 'a' (longueur 1) devient '0a' (longueur 2)
+      hex_aligne = '0' + hex_sans_prefixe
+    else:
+      # Si elle est déjà paire, la garder telle quelle
+      hex_aligne = hex_sans_prefixe
+      
+    # 3. Ajouter le préfixe '0x' requis
+    resultat = '0x' + hex_aligne
+    
+    liste_hex_alignee.append(resultat)
+    
+  return liste_hex_alignee
+
     
 def split_list_into_chunks(input_list: List[Any], chunk_size: int = 3) -> List[List[Any]]:
     """
@@ -150,8 +186,15 @@ TEST_PLAN: test_utility.TestPlan = [
                 "expected_return": 0x1234,
                 "function_arguments": ['0x1234']
             },
+            {
+                "test_title": "Conversion en hexa d'une liste de valeurs décimales",
+                "function_under_test": declist_to_hexlist,
+                "expected_return": ['0x9C', '0x06', '0x7F', '0xFC12'],
+                "function_arguments": [[156, 6, 127, 64530]]
+            },
         ]
     }
+    
 ]  
 
 def run_unitary_tests():

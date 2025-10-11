@@ -228,11 +228,12 @@ def load_song_file(song_filename, songs_dir):
 
 class MidiShowController:
     
-    def __init__(self, config_file, mapping_file, test, verbose):
+    def __init__(self, config_file, mapping_file, test, verbose, veryverbose):
         self.config = load_config(config_file)
         self.pc_map = load_mapping(mapping_file)
         self.test = test
-        self.verbose = verbose
+        self.verbose = verbose | veryverbose
+        self.veryverbose = veryverbose
         self.songs_dir = self.config.get("songs_directory", "song_sets")
         
         self.midi_in = None
@@ -335,7 +336,7 @@ class MidiShowController:
 
     def send_tap_tempo(self, bpm):
         
-        TAPTEMPO_COUNT = 10
+        TAPTEMPO_COUNT = 4
         
         """Simule le Tap Tempo sur le CQ-18T en envoyant 20 SoftKey Note On/Off."""
         
@@ -384,25 +385,25 @@ class MidiShowController:
         
         # 2. Commandes CQ-18T (NRPN)
         print("\n--- Exécution des Commandes CQ-18T ---")
-        print(self.name_to_cq_map)
+        #print(self.name_to_cq_map)
 
         for command in song_data['MIX_COMMANDS']:
-            print(command)
-            #try:
-            if '=' in command:
-                key, value = command.split('=', 1)
-                intelligible_command = f"{key.replace('/', '/')}/{value}"
-            else:
-                intelligible_command = command
-        
-            # NOUVEAU: Appel avec le mappage de noms
-            messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
-            # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
+            #print(command)
+            try:
+                if '=' in command:
+                    key, value = command.split('=', 1)
+                    intelligible_command = f"{key.replace('/', '/')}/{value}"
+                else:
+                    intelligible_command = command
             
-            self.send_midi([messages], desc)
+                # NOUVEAU: Appel avec le mappage de noms
+                messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
+                # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
+                
+                self.send_midi([messages], desc)
         
-            #except Exception as e:
-            #    print(f"/!/ Commande CQ non exécutée: {e}")
+            except Exception as e:
+                print(f"/!/ Commande CQ non exécutée: {e}")
 
         # 3. Commandes Pédales d'Effets (PC/CC)
         print("\n--- Exécution des Commandes Pédales d'Effets ---")
@@ -431,16 +432,16 @@ class MidiShowController:
     def execute_pc_commands(self, pc_number):
         """Charge et exécute le set de commandes pour le numéro PC reçu."""
         
-        if pc_number not in self.pc_map:
+        if pc_number+1 not in self.pc_map:
             print(f"/!/ PC {pc_number} non mappé à une chanson. Ignoré.")
             return
 
-        song_filename = self.pc_map[pc_number]
+        song_filename = self.pc_map[pc_number+1]
         print(f"\n- Mappage trouvé : PC {pc_number} -> Fichier '{song_filename}'")
         
         song_data = load_song_file(song_filename, self.songs_dir)
         
-        print(song_data)
+        #print(song_data)
         if song_data:
             self.execute_commands(song_data)
 
@@ -451,9 +452,12 @@ class MidiShowController:
         message_type = midi_data[0] & 0xF0
         channel_received = (midi_data[0] & 0x0F) + 1 # 1-16
         
-        if self.verbose:
-            print(f"[{time.strftime('%H:%M:%S')}] Received MIDI command {midi_data} ")
-            print(f"Rx on channel {channel_received} - waiting commands on channel {self.input_channel}")
+        if self.veryverbose:
+            try:
+                print(f"[{time.strftime('%H:%M:%S')}] Received MIDI command {utilities.declist_to_hexlist(midi_data)} ")
+            #print(f"DEBUG Rx on channel {channel_received} - waiting commands on channel {self.input_channel}")
+            except Exception as e:
+                print(f"/!/ erreur : declist_to_hexlist {e}")
         
         # Vérifie si c'est un Program Change sur le canal d'entrée spécifié
         if (message_type == 0xC0 and
@@ -497,7 +501,8 @@ def main():
                         help="Chemin vers le fichier de configuration général (JSON).")
     parser.add_argument('mapping_file', nargs='?', default='pc_mapping.json',
                         help="Chemin vers le fichier de mappage PC -> Chanson (JSON).")
-    parser.add_argument('--verbose', '-v', action='store_true', help="Affiche toutes les commandes MIDI envoyées.")
+    parser.add_argument('--verbose', '-v', action='store_true', help="Mode verbeux.")
+    parser.add_argument('--veryverbose', '-w', action='store_true', help="Mode très verbeux.")
     parser.add_argument('--test', '-t', action='store_true', help="N'envoie pas les commandes MIDI, ne fait que les afficher.")
     parser.add_argument('--autotest', '-a', action='store_true', help="Effectue un autotest interne du logiciel.")
     
@@ -523,7 +528,7 @@ def main():
         return
 
     try:
-        controller = MidiShowController(args.config_file, args.mapping_file, args.test, args.verbose)
+        controller = MidiShowController(args.config_file, args.mapping_file, args.test, args.verbose, args.veryverbose)
     except SystemExit:
         # Une erreur fatale (config/mapping non trouvé) s'est produite lors de l'init.
         return

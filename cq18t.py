@@ -105,7 +105,7 @@ def get_channel_mute_vcvf(channel_canonical_name):
     try:
         ch_index_hex = CQ_MUTE_CHANNELS_MAP[channel_canonical_name]
         ch_index_14 = convert_14bits_to_hex(ch_index_hex)
-        print(f"channel_canonical_name = {channel_canonical_name} == ch_index_hex = {ch_index_hex}")
+        #print(f"DEBUG channel_canonical_name = {channel_canonical_name} == ch_index_hex = {ch_index_hex}")
     except:
         return CQ_HEXVALUE_ERROR
         

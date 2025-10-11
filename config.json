@@ -1,8 +1,8 @@
 {
     "songs_directory": "song_sets",
 
-    "midi_in_name_part": "LoopBe",
-    "midi_in_channel": 16,
+    "midi_in_name_part": "MIDIIN2",
+    "midi_in_channel": 13,
 	
     "midi_out_name_part": "CQ18",
 	"cq_midi_channel": 1,
@@ -45,9 +45,9 @@
         "OUT4": "RETOUR_DENIS",
         "OUT5": "RETOUR_OLIVIER",
         "OUT6": "RETOUR_GENERAL",
-        "FX1": "REVERB_VOCALE",
-        "FX2": "SPATIAL_L",
-        "FX2": "SPATIAL_R",
-        "FX2": "DOUBLEUR_CHANT"
+        "FX1": "REVERB",
+        "FX2": "DELAY_VOIX",
+        "FX3": "SPATIAL",
+        "FX4": "DOUBLEUR_CHANT"
     }
 }

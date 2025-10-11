@@ -1,0 +1,35 @@
+# Chant Benjamin , choeurs Alain et Emilie, Denis et Olivier Off
+[SONG_INFO]
+BPM = 100
+
+[MIX]
+Facade/Mute = OFF
+Chant_Emilie/Mute = OFF
+Chant_Emilie/send/Facade = -3
+Chant_Emilie/pan/Facade = left 30
+Chant_Emilie/send/REVERB = -10
+Chant_Emilie/send/DOUBLEUR_CHANT = -10
+Chant_Alain/Mute = OFF
+Chant_Alain/send/Facade = -3
+Chant_Alain/pan/Facade = right 30
+Chant_Alain/send/REVERB = -10
+Chant_Alain/send/DOUBLEUR_CHANT = 0
+Chant_Benjamin/Mute = OFF
+Chant_Benjamin/send/Facade = 0
+Chant_Benjamin/pan/Facade = center
+Chant_Benjamin/send/REVERB = -10
+Chant_Benjamin/send/DOUBLEUR_CHANT = 0
+Chant_Olivier/mute = ON
+Chant_Olivier/send/Facade = -inf
+Chant_Denis/mute = ON
+Chant_Denis/send/Facade = -inf
+REVERB/send/Facade = 0
+DELAY_VOIX/send/Facade = 0
+SPATIAL/send/Facade = 0
+DOUBLEUR_CHANT/send/Facade = 0
+
+[PEDALS]
+# Les clés sont le nom de la pédale (défini dans config.json)
+# Les valeurs sont la commande MIDI PC/CC
+#Delay_M = PC/5
+#Reverb_A = CC/20/127
