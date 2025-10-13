@@ -384,49 +384,52 @@ class MidiShowController:
         """Exécute toutes les commandes pour la chanson chargée."""
         
         # 2. Commandes CQ-18T (NRPN)
-        print("\n--- Exécution des Commandes CQ-18T ---")
-        #print(self.name_to_cq_map)
-
-        for command in song_data['MIX_COMMANDS']:
-            #print(command)
-            try:
-                if '=' in command:
-                    key, value = command.split('=', 1)
-                    intelligible_command = f"{key.replace('/', '/')}/{value}"
-                else:
-                    intelligible_command = command
-            
-                # NOUVEAU: Appel avec le mappage de noms
-                messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
-                # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
+        if len(song_data['MIX_COMMANDS']) > 0:
+            print("\n--- Exécution des Commandes CQ-18T ---")
+            #print(self.name_to_cq_map)
+    
+            for command in song_data['MIX_COMMANDS']:
+                #print(command)
+                try:
+                    if '=' in command:
+                        key, value = command.split('=', 1)
+                        intelligible_command = f"{key.replace('/', '/')}/{value}"
+                    else:
+                        intelligible_command = command
                 
-                self.send_midi([messages], desc)
-        
-            except Exception as e:
-                print(f"/!/ Commande CQ non exécutée: {e}")
+                    # NOUVEAU: Appel avec le mappage de noms
+                    messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
+                    # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
+                    
+                    self.send_midi([messages], desc)
+            
+                except Exception as e:
+                    print(f"/!/ Commande CQ non exécutée: {e}")
 
         # 3. Commandes Pédales d'Effets (PC/CC)
-        print("\n--- Exécution des Commandes Pédales d'Effets ---")
-        for command_line in song_data['PEDAL_COMMANDS']:
-            try:
-                # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
-                pedal_name, command = command_line.split('=', 1)
-                pedal_name = pedal_name.strip()
-                command = command.strip()
-                
-                messages, desc = parse_pedal_command(pedal_name, command, self.pedal_map)
-                self.send_midi(messages, desc)
-            except Exception as e:
-                print(f"/!/ Commande Pédale non exécutée: {e}")
-        
-        print("\n--- Exécution du set de commandes terminée ---")
-
+        if len(song_data['PEDAL_COMMANDS']) > 0:
+            print("\n--- Exécution des Commandes Pédales d'Effets ---")
+            for command_line in song_data['PEDAL_COMMANDS']:
+                try:
+                    # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
+                    pedal_name, command = command_line.split('=', 1)
+                    pedal_name = pedal_name.strip()
+                    command = command.strip()
+                    
+                    messages, desc = parse_pedal_command(pedal_name, command, self.pedal_map)
+                    self.send_midi(messages, desc)
+                except Exception as e:
+                    print(f"/!/ Commande Pédale non exécutée: {e}")
+            
+            print("\n--- Exécution du set de commandes terminée ---")
+    
         # 1. Gestion du BPM (Metronome et Tap Tempo CQ)
-        bpm = song_data['BPM']
-        if bpm is not None:
-            print(f"BPM de la chanson: {bpm}")
-            self.set_midronome_bpm(bpm)
-            self.send_tap_tempo(bpm)
+        if len(song_data['BPM']) > 0:
+            bpm = song_data['BPM']
+            if bpm is not None:
+                print(f"BPM de la chanson: {bpm}")
+                self.set_midronome_bpm(bpm)
+                self.send_tap_tempo(bpm)
 
 
     def execute_pc_commands(self, pc_number):
@@ -553,3 +556,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
