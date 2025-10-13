@@ -3,13 +3,13 @@
 
     "midi_in_name_part": "MIDIIN2",
     "midi_in_channel": 13,
-	
-    "midi_out_name_part": "CQ18",
-	"cq_midi_channel": 1,
-    "midi_out_channel": 1,
 
+	"cq_out_name_part": "CQ18",
+	"cq_midi_channel": 1,
     "cq_tap_tempo_softkey": "Soft Key #2", 
-    
+	
+    "midi_out_name_part": "MIDIOUT2",
+    "midi_out_channel": 1,
     "midronome_channel": 12,
     
     "pedals": {
@@ -50,4 +50,5 @@
         "FX3": "SPATIAL",
         "FX4": "DOUBLEUR_CHANT"
     }
+
 }
