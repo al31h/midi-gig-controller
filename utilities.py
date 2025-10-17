@@ -19,6 +19,23 @@ def dec_to_hex_16bit(dec_value):
     # Utilise le formatage de chaîne pour obtenir 4 chiffres hexadécimaux
     return f'{dec_value:04X}'
 
+def dec_to_aligned_hex(dec_value):
+    hex_sans_prefixe = hex(dec_value)[2:].upper()
+    
+    # 2. Vérifier si la longueur est impaire (modulo 2 non nul)
+    if len(hex_sans_prefixe) % 2 != 0:
+      # Si elle est impaire, ajouter un '0' en tête pour la rendre paire
+      # Par exemple: 'a' (longueur 1) devient '0a' (longueur 2)
+      hex_aligne = '0' + hex_sans_prefixe
+    else:
+      # Si elle est déjà paire, la garder telle quelle
+      hex_aligne = hex_sans_prefixe
+      
+    # 3. Ajouter le préfixe '0x' requis
+    resultat = '0x' + hex_aligne
+    return resultat
+    
+    
 def declist_to_hexlist(dec_list):
   """
   Convertit une liste de valeurs (entiers) en une liste de chaînes 
@@ -36,21 +53,21 @@ def declist_to_hexlist(dec_list):
   
   for valeur in dec_list:
     # 1. Obtenir la partie hexadécimale sans le préfixe '0x'
-    hex_sans_prefixe = hex(valeur)[2:].upper()
+    #hex_sans_prefixe = hex(valeur)[2:].upper()
     
     # 2. Vérifier si la longueur est impaire (modulo 2 non nul)
-    if len(hex_sans_prefixe) % 2 != 0:
+    #if len(hex_sans_prefixe) % 2 != 0:
       # Si elle est impaire, ajouter un '0' en tête pour la rendre paire
       # Par exemple: 'a' (longueur 1) devient '0a' (longueur 2)
-      hex_aligne = '0' + hex_sans_prefixe
-    else:
+    #  hex_aligne = '0' + hex_sans_prefixe
+    #else:
       # Si elle est déjà paire, la garder telle quelle
-      hex_aligne = hex_sans_prefixe
+    #  hex_aligne = hex_sans_prefixe
       
     # 3. Ajouter le préfixe '0x' requis
-    resultat = '0x' + hex_aligne
-    
-    liste_hex_alignee.append(resultat)
+    #resultat = '0x' + hex_aligne
+    val_hex = dec_to_aligned_hex(valeur)
+    liste_hex_alignee.append(val_hex)
     
   return liste_hex_alignee
 

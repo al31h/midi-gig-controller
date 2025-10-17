@@ -1,5 +1,5 @@
 [SONG_INFO]
-BPM = 255
+BPM = 35
 
 [MIX]
 FACADE/mute = OFF
@@ -23,9 +23,11 @@ REVERB/send/FACADE = -10
 [PEDALS]
 # Les clés sont le nom de la pédale (défini dans config.json)
 # Les valeurs sont la commande MIDI PC/CC
-Alain_Sim_Amp = PC 59
-Alain_Mfx = PC 89
-Alain_HXone = PC 1
-Benjamin_Sim_Amp = PC 2
-Denis_Sim_Amp = PC 56
+Alain_Sim_Amp = PC 12
+Alain_Mfx = PC 90
+Alain_HXone = PC 3
+Benjamin_Sim_Amp = PC 3
+Denis_Sim_Amp = PC 59
 
+#Delay_M = PC/5
+#Reverb_A = CC/20/127

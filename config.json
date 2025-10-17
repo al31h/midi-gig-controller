@@ -12,14 +12,13 @@
     "midi_out_channel": 1,
     "midronome_channel": 12,
     
-    "pedals": {
-        "Denis_Sim_Amp": 3,      
-        "Alain_Sim_Amp": 4,
-        "Alain_HXone": 5,
-        "Alain_Mfx": 6,
-        "Benjamin_Sim_Amp": 7
+	"pedals": {
+        "Denis_Sim_Amp": [3, 0],
+		"Alain_Sim_Amp": [4, 0],
+        "Alain_HXone": [5, 1],
+        "Alain_Mfx": [6, 0],
+        "Benjamin_Sim_Amp": [7, 0]
     },
-    
     "channel_names": {
         "IN1": "CHANT_EMILIE",
 		"IN2": "CHANT_OLIVIER",

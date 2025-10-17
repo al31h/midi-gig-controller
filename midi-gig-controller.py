@@ -135,16 +135,21 @@ def parse_mix_command(midi_channel, command, name_to_cq_map):
 
 def parse_pedal_command(pedal_name, command, pedal_map):
     """Analyse les commandes pour les pédales d'effets (PC/CC)."""
+    pedal_name = pedal_name.upper()
+    
     if pedal_name not in pedal_map:
         return [], f"Pedale '{pedal_name}' inconnue. Ignorée."
         
-    midi_channel = pedal_map[pedal_name] - 1 # 0-indexed
-    parts = [p.strip() for p in command.split('/')]
+    pedal_parameters = pedal_map[pedal_name]
+    midi_channel = pedal_parameters[0] - 1 # 0-indexed
+    pc_offset = pedal_parameters[1]
+    
+    parts = [p.strip() for p in command.split(' ')]
 
     if parts[0].upper() == 'PC':
-        pc_num = int(parts[1])
+        pc_num = int(parts[1]) - 1 + pc_offset
         # [Program Change | channel, PC number]
-        midi_msg = [rtmidi.MidiMessage.PROGRAM_CHANGE | midi_channel, pc_num]
+        midi_msg = [0xC0 | midi_channel, pc_num]
         desc = f"Pédale {pedal_name} (Ch {pedal_map[pedal_name]}): PC {pc_num} envoyé."
         return [midi_msg], desc
         
@@ -152,7 +157,7 @@ def parse_pedal_command(pedal_name, command, pedal_map):
         cc_num = int(parts[1])
         cc_val = int(parts[2])
         # [Control Change | channel, CC number, CC value]
-        midi_msg = [rtmidi.MidiMessage.CONTROLLER | midi_channel, cc_num, cc_val]
+        midi_msg = [0xB0 | midi_channel, cc_num, cc_val]
         desc = f"Pédale {pedal_name} (Ch {pedal_map[pedal_name]}): CC {cc_num}/{cc_val} envoyé."
         return [midi_msg], desc
         
@@ -169,7 +174,13 @@ def load_config(file_path):
             config = json.load(f)
             # Convertir les canaux des pédales en numéros (assurant qu'ils sont bien des entiers)
             pedals = config.get('pedals', {})
-            config['pedals'] = {name: int(ch) for name, ch in pedals.items()}
+            
+            config['pedals'] = {
+                name.upper(): [int(value) for value in params]  # La nouvelle valeur est une liste de nombres entiers
+                for name, params in pedals.items()
+            }
+            
+            #config['pedals'] = {name.upper(): int(ch) for name, ch in pedals.items()}
             return config
     except Exception as e:
         print(f"/!/ Erreur de lecture/parsing du fichier de configuration général '{file_path}': {e}")
@@ -198,11 +209,20 @@ def load_song_file(song_filename, songs_dir):
              parser.read_string(content)
              
         data = {
-            'BPM': parser.getfloat('SONG_INFO', 'BPM', fallback=None),
+            #'BPM': parser.getfloat('SONG_INFO', 'BPM', fallback=None),
+            'SONG_COMMANDS': parser.options('SONG_INFO') if parser.has_section('SONG_INFO') else [],
             'MIX_COMMANDS': parser.options('MIX') if parser.has_section('MIX') else [],
-            'PEDAL_COMMANDS': []
+            'PEDAL_COMMANDS': parser.options('PEDALS') if parser.has_section('PEDALS') else [],
+            #'PEDAL_COMMANDS': []
         }
         
+        # Lire les commandes SONG
+        if parser.has_section('SONG_INFO'):
+            data['SONG_COMMANDS'] = [
+                f"{key}/{parser.get('SONG_INFO', key)}" 
+                for key in parser.options('SONG_INFO')
+            ]
+
         # Lire les commandes CQ
         if parser.has_section('MIX'):
             data['MIX_COMMANDS'] = [
@@ -217,6 +237,7 @@ def load_song_file(song_filename, songs_dir):
                 for key in parser.options('PEDALS')
             ]
 
+        print(f"DEBUG : raw song_data after extraction: {data}")
         return data
         
     except Exception as e:
@@ -238,19 +259,22 @@ class MidiShowController:
         
         self.midi_in = None
         self.midi_out = None
+        self.midi_cq_out = None
         
         self.input_name = self.config.get('midi_in_name_part')
-        self.output_name = self.config.get('midi_out_name_part')
         self.input_channel = self.config.get('midi_in_channel', 1)
+        
+        self.cq_out_name = self.config.get('cq_out_name_part')
         self.cq_midi_channel = self.config.get('cq_midi_channel', 1)
-        self.midronome_channel = self.config.get('midronome_channel', 16)
         self.cq_tap_tempo_softkey = self.config.get('cq_tap_tempo_softkey', '')
-        self.pedal_map = self.config.get('pedals', {})
-
-        # NOUVEAU: Mappage Nom_Utilisateur -> Canal_CQ (ex: Chant_Emilie -> IN1)
         self.name_to_cq_map = {
             v: k for k, v in self.config.get('channel_names', {}).items()            
         }
+        
+        self.output_name = self.config.get('midi_out_name_part')
+        self.midronome_channel = self.config.get('midronome_channel', 16)
+        self.pedal_map = self.config.get('pedals', {})
+
 
     def __enter__(self):
         """Ouvre les ports MIDI au début."""
@@ -263,22 +287,9 @@ class MidiShowController:
 
     def open_ports(self):
         print("Initialisation des ports MIDI...")
-        self.midi_in = rtmidi.MidiIn()
-        self.midi_out = rtmidi.MidiOut()        
         
-        # Port de Sortie
-        try:
-            port_index, port_name = get_port_by_name(self.midi_out, self.output_name)
-            if port_index is not None:
-                self.midi_out.open_port(port_index)
-                print(f"- Port de sortie (pour CQ/Pédales) ouvert: {port_name}")
-            else:
-                raise Exception(f"Interface MIDI de sortie '{self.output_name}' non trouvée.")
-        except Exception as e:
-            print(f"/!/ Erreur d'ouverture du port de sortie MIDI ({self.output_name}): {e}")
-            sys.exit(1)
-
-        # Port d'Entrée
+        # MIDI Input
+        self.midi_in = rtmidi.MidiIn()
         try:
             port_index, port_name = get_port_by_name(self.midi_in, self.input_name)
             if port_index is not None:
@@ -291,14 +302,44 @@ class MidiShowController:
         except Exception as e:
             print(f"/!/ Erreur d'ouverture du port d'entrée MIDI ({self.input_name}): {e}")
             self.close_ports()
-            sys.exit(1)
+            sys.exit(1)        
+
+        # MIDI Output to the CQ mixer (specific MIDI interface)
+        if len(self.cq_out_name) > 0:
+            self.midi_cq_out = rtmidi.MidiOut()        
+            try:
+                port_index, port_name = get_port_by_name(self.midi_cq_out, self.cq_out_name)
+                if port_index is not None:
+                    self.midi_cq_out.open_port(port_index)
+                    print(f"- Port de sortie pour CQ ouvert: {port_name}")
+                else:
+                    raise Exception(f"Interface MIDI CQ de sortie '{self.cq_out_name}' non trouvée.")
+            except Exception as e:
+                print(f"/!/ Erreur d'ouverture du port de sortie MIDI CQ ({self.cq_out_name}): {e}")
+                sys.exit(1)
+            
+        # MIDI Output to the other peripherals
+        if len(self.output_name) > 0:
+            self.midi_out = rtmidi.MidiOut()        
+            try:
+                port_index, port_name = get_port_by_name(self.midi_out, self.output_name)
+                if port_index is not None:
+                    self.midi_out.open_port(port_index)
+                    print(f"- Port de sortie pour Pédales ouvert: {port_name}")
+                else:
+                    raise Exception(f"Interface MIDI de sortie '{self.output_name}' non trouvée.")
+            except Exception as e:
+                print(f"/!/ Erreur d'ouverture du port de sortie MIDI ({self.output_name}): {e}")
+                sys.exit(1)
+        
 
     def close_ports(self):
         if self.midi_in: self.midi_in.close()
+        if self.midi_cq_out: self.midi_cq_out.close()
         if self.midi_out: self.midi_out.close()
         print("\nPorts MIDI fermés.")
 
-    def send_midi(self, midi_messages, description):
+    def send_midi(self, midi_output, midi_messages, description):
         """Envoie un ou plusieurs messages MIDI et affiche si verbeux."""
         
         for msg in midi_messages:
@@ -312,15 +353,15 @@ class MidiShowController:
                     channel = (chunk[0] & 0x0F) + 1
                     
                     if msg_type == 0xC0:
-                        msg_desc = f"PC {chunk[1]}"
+                        msg_desc = f"PC {utilities.dec_to_aligned_hex(chunk[1])}"
                     elif msg_type == 0x80:
-                        msg_desc = f"Note Off {hex(chunk[1])} {hex(chunk[2])} "
+                        msg_desc = f"Note Off {utilities.dec_to_aligned_hex(chunk[1])} {utilities.dec_to_aligned_hex(chunk[2])} "
                     elif msg_type == 0x90:
-                        msg_desc = f"Note On {hex(chunk[1])} {hex(chunk[2])} "
+                        msg_desc = f"Note On {utilities.dec_to_aligned_hex(chunk[1])} {utilities.dec_to_aligned_hex(chunk[2])} "
                     elif msg_type == 0xB0 and chunk[1] in [0x60, 0x61, 0x62, 0x63, 0x06, 0x26]:
-                        msg_desc = f"NRPN: {hex(msg_type)} {hex(chunk[1])} {hex(chunk[2])}"
+                        msg_desc = f"NRPN: {hex(msg_type)} {utilities.dec_to_aligned_hex(chunk[1])} {utilities.dec_to_aligned_hex(chunk[2])}"
                     elif msg_type == 0xB0:
-                        msg_desc = f"CC{chunk[1]}={chunk[2]}"
+                        msg_desc = f"CC{chunk[1]}={utilities.dec_to_aligned_hex(chunk[2])}"
                     else:
                         msg_desc = f"Raw: {chunk}"
                     
@@ -329,19 +370,21 @@ class MidiShowController:
                 
                 if self.test == False:
                     try:
-                        self.midi_out.send_message(chunk)
+                        midi_output.send_message(chunk)
                     except Exception as e:
                         print(f"/!/ Erreur d'envoi du message MIDI ({chunk}): {e}")               
                 
 
-    def send_tap_tempo(self, bpm):
+    def send_tap_tempo(self, bpm_str):
         
         TAPTEMPO_COUNT = 4
         
         """Simule le Tap Tempo sur le CQ-18T en envoyant 20 SoftKey Note On/Off."""
-        
+
+        bpm = float(bpm_str)        
         if bpm <= 0: return
-        print(f"tap tempo - bpm = {bpm}")
+        if self.verbose:
+            print(f"tap tempo - bpm = {bpm}")
         
         channel = self.cq_midi_channel - 1 
         tap_tempo_softkey = self.cq_tap_tempo_softkey 
@@ -356,33 +399,46 @@ class MidiShowController:
         # Tap Tempo = 60 / BPM
         interval = 60.0 / bpm
 
-        print(f"= Envoi du Tap Tempo ({bpm} BPM) au CQ18-T, 20 frappes)...")
+        if self.verbose:
+            print(f"= Envoi du Tap Tempo ({bpm} BPM) au CQ18-T, {TAPTEMPO_COUNT} frappes)...")
 
         i = 0
         for i in range(TAPTEMPO_COUNT): # X frappes pour une bonne précision
-            self.send_midi([midi_msg], f"CQ18T Tap Tempo {i} {bpm}")
+            self.send_midi(self.midi_cq_out, [midi_msg], f"CQ18T Tap Tempo {i} {bpm}")
             
             # Attendre l'intervalle du tempo
             if i < TAPTEMPO_COUNT-1:
                 time.sleep(interval) 
 
-        print("Tap Tempo terminé.")
+        if self.verbose:
+            print("Tap Tempo terminé.")
 
-    def set_midronome_bpm(self, bpm):
+    def set_midronome_bpm(self, bpm_str):
         """Règle le BPM sur un métronome externe via MIDI Clock/Tempo."""
         # Le midronome se pilote en tempo par une commande CC : 0xB<channel-1> 0x57 <BPM-60>
         # Donc,par exemple, midronome sur canal 12, et BPM 165 : BB 57 69
         
+        bpm = float(bpm_str)
+        
+        if self.verbose:
+            print(f"DEBUG set_midronome_bpm(bpm = {bpm})")
+            
         if bpm <= 0: return
         
+        bpm_msb = int(bpm / 128)
+        bpm_lsb = int(bpm % 128)
+        
         channel = self.midronome_channel - 1 
-        midi_msg = [0xB0 | channel, 0x57, (bpm-60)]
-        self.send_midi([midi_msg], f"Midronome BPM (CC) {bpm}")
+#        midi_msg = [0xB0 | channel, 0x57, (int(bpm)-60)]
+        midi_msg = [0xB0 | channel, 0x55, int(bpm_msb), 0xB0 | channel, 0x56, int(bpm_lsb)]
+        self.send_midi(self.midi_out, [midi_msg], f"Midronome BPM (CC) {bpm}")
         
 
     def execute_commands(self, song_data):
         """Exécute toutes les commandes pour la chanson chargée."""
         
+        #print(f"DEBUG song_data['BPM'] = {song_data['BPM']}")
+
         # 2. Commandes CQ-18T (NRPN)
         if len(song_data['MIX_COMMANDS']) > 0:
             print("\n--- Exécution des Commandes CQ-18T ---")
@@ -401,36 +457,55 @@ class MidiShowController:
                     messages, desc = parse_mix_command(self.cq_midi_channel, intelligible_command, self.name_to_cq_map)
                     # print(f"DEBUG execute_commands: messages = {messages} - desc = {desc}")
                     
-                    self.send_midi([messages], desc)
+                    self.send_midi(self.midi_cq_out, [messages], desc)
             
                 except Exception as e:
                     print(f"/!/ Commande CQ non exécutée: {e}")
+
+        #print(f"DEBUG 2 song_data['BPM'] = {song_data['BPM']}")
 
         # 3. Commandes Pédales d'Effets (PC/CC)
         if len(song_data['PEDAL_COMMANDS']) > 0:
             print("\n--- Exécution des Commandes Pédales d'Effets ---")
             for command_line in song_data['PEDAL_COMMANDS']:
+                print(command_line)
                 try:
                     # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
-                    pedal_name, command = command_line.split('=', 1)
+                    pedal_name, command = command_line.split('/', 1)
                     pedal_name = pedal_name.strip()
                     command = command.strip()
                     
                     messages, desc = parse_pedal_command(pedal_name, command, self.pedal_map)
-                    self.send_midi(messages, desc)
+                        
+                    self.send_midi(self.midi_out, messages, desc)
                 except Exception as e:
                     print(f"/!/ Commande Pédale non exécutée: {e}")
             
             print("\n--- Exécution du set de commandes terminée ---")
+
+        #print(f"DEBUG 3 song_data['BPM'] = {song_data['BPM']}")
     
         # 1. Gestion du BPM (Metronome et Tap Tempo CQ)
-        if len(song_data['BPM']) > 0:
-            bpm = song_data['BPM']
-            if bpm is not None:
-                print(f"BPM de la chanson: {bpm}")
-                self.set_midronome_bpm(bpm)
-                self.send_tap_tempo(bpm)
-
+        if len(song_data['SONG_COMMANDS']) > 0:
+            print("\n--- Exécution des Commandes Générales ---")
+            for command_line in song_data['SONG_COMMANDS']:
+                print(command_line)
+                try:
+                    # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
+                    song_param, value = command_line.split('/', 1)
+                    song_param = song_param.strip()
+                    value = value.strip()
+                    
+                    if song_param == 'bpm':
+                        print(f"BPM de la chanson: {value}")
+                        self.set_midronome_bpm(value)
+                        self.send_tap_tempo(value)
+                        
+                except Exception as e:
+                    print(f"/!/ Commande Générale non exécutée: {e}")
+            
+            print("\n--- Exécution du set de commandes générales terminée ---")
+                
 
     def execute_pc_commands(self, pc_number):
         """Charge et exécute le set de commandes pour le numéro PC reçu."""
@@ -443,10 +518,13 @@ class MidiShowController:
         print(f"\n- Mappage trouvé : PC {pc_number} -> Fichier '{song_filename}'")
         
         song_data = load_song_file(song_filename, self.songs_dir)
-        
-        #print(song_data)
-        if song_data:
+
+        print(song_data)
+        try:
             self.execute_commands(song_data)
+#            if len(song_data) > 0:
+        except Exception as e:
+            print(f"Unexpected {e=}, {type(e)=}")
 
     def midi_callback(self, message, data=None):
         """Gère la réception des messages MIDI (appelé par rtmidi)."""
