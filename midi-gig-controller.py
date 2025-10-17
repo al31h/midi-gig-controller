@@ -10,8 +10,9 @@ import re
 import sys
 import time
 from argparse import ArgumentParser
-from configparser import ConfigParser
+import configparser 
 import numpy as np
+from typing import Optional, Tuple
 
 # Nécessite l'installation: pip install python-rtmidi
 try:
@@ -150,7 +151,7 @@ def parse_pedal_command(pedal_name, command, pedal_map):
         pc_num = int(parts[1]) - 1 + pc_offset
         # [Program Change | channel, PC number]
         midi_msg = [0xC0 | midi_channel, pc_num]
-        desc = f"Pédale {pedal_name} (Ch {pedal_map[pedal_name]}): PC {pc_num} envoyé."
+        desc = f"Pédale {pedal_name} (Ch {pedal_map[pedal_name]}): PC {pc_num + 1 - pc_offset} envoyé."
         return [midi_msg], desc
         
     elif parts[0].upper() == 'CC':
@@ -244,12 +245,117 @@ def load_song_file(song_filename, songs_dir):
         print(f"/!/ Erreur lors du chargement/parsing du fichier de chanson '{filepath}': {e}")
         return None
 
+def parse_command_arg(command_str: str) -> Optional[Tuple[str, str, Optional[str]]]:
+    """
+    Parse une chaîne de commande au format 'SECTION/CLE = VALEUR' ou 'SECTION/CLE'.
+    Retourne (section, key, value) ou (section, key, None) pour la suppression.
+    """
+    if "=" in command_str:
+        # Cas pour --add ou --update
+        section_key, value = command_str.split("=", 1)
+        value = value.strip()
+    else:
+        # Cas pour --delete
+        section_key = command_str
+        value = None
+    
+    parts = section_key.strip().split("/", 1)
+    
+    if len(parts) != 2:
+        print(f"Erreur de format : La commande '{command_str}' doit être au format 'SECTION/CLE[ = VALEUR]'.")
+        return None
+        
+    section, key = parts[0].upper(), parts[1] # Mettre la section en majuscules pour correspondre
+    
+    return section, key, value
+
+
+def update_song_file(filepath: str, operation: str, section: str, key: str, value: Optional[str] = None) -> bool:
+    """
+    Effectue une opération (add, update, delete) sur une commande dans un fichier.
+    
+    Retourne True si le fichier a été modifié, False sinon.
+    """
+    config = configparser.ConfigParser(allow_no_value=True) # allow_no_value pour les sections sans valeur (moins commun)
+    
+    # 1. Lire le fichier existant
+    # Utiliser read() au lieu de read_file() car configparser gère l'absence de fichier
+    files_read = config.read(filepath)
+    file_exists = bool(files_read)
+    
+    file_modified = False
+
+    # 2. Effectuer l'opération
+    
+    if operation in ("add", "update"):
+        # Assurer que la section existe pour l'ajout/mise à jour
+        if not config.has_section(section):
+            config.add_section(section)
+            file_modified = True
+            
+        # config.set() peut ajouter (add) ou mettre à jour (update)
+        current_value = config.get(section, key, fallback=None)
+        if current_value != value:
+            config.set(section, key, value)
+            file_modified = True
+            print(f"  ✅ {section}/{key} : {'Ajouté' if current_value is None else 'Mis à jour'} à '{value}'.")
+        else:
+            print(f"  ☑️ {section}/{key} : Valeur déjà définie sur '{value}'. Aucune modification.")
+
+
+    elif operation == "delete":
+        if config.has_section(section) and config.has_option(section, key):
+            config.remove_option(section, key)
+            file_modified = True
+            print(f"  ❌ {section}/{key} : Supprimé.")
+        else:
+            print(f"  ☑️ {section}/{key} : Clé non trouvée. Aucune suppression nécessaire.")
+    
+    # 3. Écrire le fichier si modifié
+    if file_modified:
+        # S'assurer que le répertoire existe (utile si le fichier est ajouté pour la première fois)
+        os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
+        with open(filepath, 'w') as configfile:
+            config.write(configfile)
+        return True
+    
+    return False
+
+
+def mass_update_songs(directory_path: str, command_str: str, operation: str, file_extension: str = '.txt') -> int:
+    """
+    Applique la même opération (add/update/delete) à tous les fichiers de chansons.
+    
+    Retourne le nombre de fichiers modifiés.
+    """
+    parsed_command = parse_command_arg(command_str)
+    if not parsed_command:
+        return 0
+    
+    section, key, value = parsed_command
+    modified_count = 0
+    
+    print(f"\n--- Début de la mise à jour massive : Opération '{operation.upper()}' ---")
+    print(f"Cible : Section='{section}', Clé='{key}', Valeur='{value}'")
+
+    for filename in os.listdir(directory_path):
+        if filename.endswith(file_extension):
+            filepath = os.path.join(directory_path, filename)
+            print(f"\nTraitement du fichier : {filename}")
+            if update_song_file(filepath, operation, section, key, value):
+                modified_count += 1
+
+    print(f"\n--- Fin de la mise à jour ---")
+    print(f"{modified_count} fichier(s) modifié(s).")
+    return modified_count
+
+
 
 # --- La Classe Contrôleur Principale ---
 
 class MidiShowController:
     
-    def __init__(self, config_file, mapping_file, test, verbose, veryverbose):
+    def __init__(self, config_file, mapping_file, test, verbose, veryverbose, update_mode, update_args):
         self.config = load_config(config_file)
         self.pc_map = load_mapping(mapping_file)
         self.test = test
@@ -275,11 +381,23 @@ class MidiShowController:
         self.midronome_channel = self.config.get('midronome_channel', 16)
         self.pedal_map = self.config.get('pedals', {})
 
+        self.update_mode = update_mode
+        self.update_args = update_args
+        
 
     def __enter__(self):
-        """Ouvre les ports MIDI au début."""
-        self.open_ports()
-        return self
+        """Ouvre les ports MIDI au début, sauf si une commande d'update de song files est utilisée """
+        
+        # --- Logique d'exécution des mises à jour massives de fichiers chansons ---
+        if self.update_mode in ("add", "delete", "update"):
+            # Le contenu de args.add est la chaîne de commande (ex: "SONG_INFO/BPM = 45")
+            # Notez que args.delete contient la chaîne de commande complète (ex: "SONG_INFO/BPM")
+            mass_update_songs(self.songs_dir, self.update_args, operation=self.update_mode)
+            sys.exit(0)
+            
+        else: # normal mode
+            self.open_ports()
+            return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Ferme les ports MIDI à la fin."""
@@ -334,10 +452,11 @@ class MidiShowController:
         
 
     def close_ports(self):
-        if self.midi_in: self.midi_in.close()
-        if self.midi_cq_out: self.midi_cq_out.close()
-        if self.midi_out: self.midi_out.close()
-        print("\nPorts MIDI fermés.")
+        if self.update_mode == "":
+            if self.midi_in: self.midi_in.close()
+            if self.midi_cq_out: self.midi_cq_out.close()
+            if self.midi_out: self.midi_out.close()
+            print("\nPorts MIDI fermés.")
 
     def send_midi(self, midi_output, midi_messages, description):
         """Envoie un ou plusieurs messages MIDI et affiche si verbeux."""
@@ -468,7 +587,6 @@ class MidiShowController:
         if len(song_data['PEDAL_COMMANDS']) > 0:
             print("\n--- Exécution des Commandes Pédales d'Effets ---")
             for command_line in song_data['PEDAL_COMMANDS']:
-                print(command_line)
                 try:
                     # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
                     pedal_name, command = command_line.split('/', 1)
@@ -489,7 +607,6 @@ class MidiShowController:
         if len(song_data['SONG_COMMANDS']) > 0:
             print("\n--- Exécution des Commandes Générales ---")
             for command_line in song_data['SONG_COMMANDS']:
-                print(command_line)
                 try:
                     # Le format de fichier PEDALS utilise 'Delay_M=PC/5'
                     song_param, value = command_line.split('/', 1)
@@ -586,7 +703,19 @@ def main():
     parser.add_argument('--veryverbose', '-w', action='store_true', help="Mode très verbeux.")
     parser.add_argument('--test', '-t', action='store_true', help="N'envoie pas les commandes MIDI, ne fait que les afficher.")
     parser.add_argument('--autotest', '-a', action='store_true', help="Effectue un autotest interne du logiciel.")
+
+    # --- Groupe pour les mises à jour massives (Exclusif) ---
+    # Ceci garantit qu'on ne peut spécifier qu'UNE SEULE opération (--add, --update, ou --delete)
+    mass_group = parser.add_mutually_exclusive_group()
     
+    mass_group.add_argument('--add', type=str, 
+                            help='Ajoute une commande. Format: "SECTION/CLE = VALEUR"')
+                            
+    mass_group.add_argument('--update', type=str, 
+                            help='Met à jour une commande existante. Format: "SECTION/CLE = VALEUR"')
+                            
+    mass_group.add_argument('--delete', type=str, 
+                            help='Supprime une commande. Format: "SECTION/CLE"')    
     
     args = parser.parse_args()
     print([args])
@@ -608,18 +737,40 @@ def main():
         parser.print_help()
         return
 
+    # --- Logique d'exécution des mises à jour massives ---
+    if args.add:
+        # Le contenu de args.add est la chaîne de commande (ex: "SONG_INFO/BPM = 45")
+        update_mode = "add"
+        update_args = args.add
+        
+    elif args.update:
+        update_mode = "update"
+        update_args = args.update
+        
+    elif args.delete:
+        # Notez que args.delete contient la chaîne de commande complète (ex: "SONG_INFO/BPM")
+        update_mode = "delete"
+        update_args = args.delete
+    else:
+        update_mode = ""
+        update_args = []
+
     try:
-        controller = MidiShowController(args.config_file, args.mapping_file, args.test, args.verbose, args.veryverbose)
+        controller = MidiShowController(args.config_file, args.mapping_file, args.test, args.verbose, args.veryverbose, update_mode, update_args)
     except SystemExit:
         # Une erreur fatale (config/mapping non trouvé) s'est produite lors de l'init.
         return
 
-    if args.test:
-        print(f"Démarrage du contrôleur en mode Test. Aucune commande MIDI ne sera envoyée.")
+
+    if len(update_mode) > 0:
+        print(f"Mise à jour massive des fichiers de chanson")
     else:
-        print(f"Démarrage du contrôleur (Mode Verbeux: {args.verbose}).")
-    print(f"Écoute des commandes MIDI PC sur l'interface '{controller.input_name}', canal {controller.input_channel}...")
-    print("Appuyez sur Ctrl+C pour arrêter.")
+        if args.test:
+            print(f"Démarrage du contrôleur en mode Test. Aucune commande MIDI ne sera envoyée.")
+        else:
+            print(f"Démarrage du contrôleur (Mode Verbeux: {args.verbose}).")
+        print(f"Écoute des commandes MIDI PC sur l'interface '{controller.input_name}', canal {controller.input_channel}...")
+        print("Appuyez sur Ctrl+C pour arrêter.")
     
     try:
         with controller:

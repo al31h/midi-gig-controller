@@ -1,31 +1,30 @@
 [SONG_INFO]
-BPM = 255
+bpm = 255
 
 [MIX]
-FACADE/mute = OFF
-CHANT_EMILIE/mute = OFF
-CHANT_EMILIE/send/FACADE = 0
-CHANT_EMILIE/pan/FACADE = left 30
-CHANT_EMILIE/send/RETOUR_EMILIE = 0
-CHANT_EMILIE/send/REVERB = -10
-CHANT_ALAIN/mute = OFF
-CHANT_ALAIN/send/FACADE = -5
-CHANT_ALAIN/pan/FACADE = left 30
-CHANT_ALAIN/send/REVERB = -10
-CHANT_BENJAMIN/send/FACADE = -5
-CHANT_BENJAMIN/pan/FACADE = left 30
-CHANT_BENJAMIN/send/REVERB = -10
-CHANT_OLIVIER/mute = ON
-CHANT_DENIS/mute = ON
-FACADE/level = -20
-REVERB/send/FACADE = -10
+facade/mute = OFF
+chant_emilie/mute = OFF
+chant_emilie/send/facade = 0
+chant_emilie/pan/facade = left 30
+chant_emilie/send/retour_emilie = 0
+chant_emilie/send/reverb = -10
+chant_alain/mute = OFF
+chant_alain/send/facade = -5
+chant_alain/pan/facade = left 30
+chant_alain/send/reverb = -10
+chant_benjamin/send/facade = -5
+chant_benjamin/pan/facade = left 30
+chant_benjamin/send/reverb = -10
+chant_olivier/mute = ON
+chant_denis/mute = ON
+facade/level = -20
+reverb/send/facade = -10
+chant_olivier/send/reverb = -10
 
 [PEDALS]
-# Les clés sont le nom de la pédale (défini dans config.json)
-# Les valeurs sont la commande MIDI PC/CC
-Alain_Sim_Amp = PC 59
-Alain_Mfx = PC 89
-Alain_HXone = PC 1
-Benjamin_Sim_Amp = PC 2
-Denis_Sim_Amp = PC 56
+alain_sim_amp = PC 59
+alain_mfx = PC 89
+alain_hxone = PC 1
+benjamin_sim_amp = PC 2
+denis_sim_amp = PC 56
 
